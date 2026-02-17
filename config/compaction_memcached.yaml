@@ -1,0 +1,29 @@
+---
+# Compaction data collection config for Memcached (YCSB workload)
+# In-memory cache — read-heavy, stable huge pages expected (low bloat).
+#
+# See compaction_redis.yaml for hook rationale.
+# Increase operation_count for longer runs.
+benchmark_config:
+  generic:
+    benchmark: memcached
+    cpus: 0
+    skip_clear_page_cache: false
+    transparent_hugepages: always
+    overcommit_memory: never_check
+  memcached:
+    operation_count: 10000
+    read_proportion: 0.99
+    update_proportion: 0.01
+collector_config:
+  generic:
+    poll_rate: 0.1
+    output_dir: data
+    output_graphs: false
+    hooks:
+      - mm_rss_stat
+      - memory_usage
+      - perf
+      - process_trace
+      - smaps_harness
+      - vmstat_harness

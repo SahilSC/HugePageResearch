@@ -1,0 +1,25 @@
+---
+# Compaction data collection config for Linux Kernel Build
+# Compilation workload — short-lived processes, high page table churn.
+#
+# See compaction_redis.yaml for hook rationale.
+benchmark_config:
+  generic:
+    benchmark: linux_build
+    cpus: 0
+    skip_clear_page_cache: false
+    transparent_hugepages: always
+    overcommit_memory: never_check
+  linux_build: {}
+collector_config:
+  generic:
+    poll_rate: 0.1
+    output_dir: data
+    output_graphs: false
+    hooks:
+      - mm_rss_stat
+      - memory_usage
+      - perf
+      - process_trace
+      - smaps_harness
+      - vmstat_harness

@@ -180,9 +180,13 @@ class CollectionData:
         *,
         use_matplot: bool = False,
         no_trends: bool = False,
+        show: bool | None = None,
     ) -> None:
         # TODO(Patrick) use verbosity for filtering graphs
-        graph_engine = GraphEngine(collection_data=self, use_matplot=use_matplot)
+        should_show = out_dir is None if show is None else show
+        graph_engine = GraphEngine(
+            collection_data=self, use_matplot=use_matplot, show=should_show
+        )
         for _, collection_table in self.tables.items():
             for graph_type in collection_table.graphs():
                 graph = graph_type.with_graph_engine(graph_engine)
@@ -192,7 +196,7 @@ class CollectionData:
                 if out_dir:
                     graph_engine.savefig(graph, out_dir)
                 graph_engine.clear()
-        if use_matplot:
+        if use_matplot and should_show:
             print("Hit 'Enter' to continue...")
             input()
 
@@ -262,9 +266,16 @@ class CollectionData:
 
 
 class GraphEngine:
-    def __init__(self, *, collection_data: CollectionData, use_matplot: bool = False):
+    def __init__(
+        self,
+        *,
+        collection_data: CollectionData,
+        use_matplot: bool = False,
+        show: bool = True,
+    ):
         self.collection_data = collection_data
         self._plt = pyplot if use_matplot else plotext
+        self._show_graphs = show
         self._y_axis: str | None = None
         self._figure = None
         self._ax = None
@@ -306,6 +317,8 @@ class GraphEngine:
             self._ax2.legend(loc="upper right")
 
     def _show(self) -> None:
+        if not self._show_graphs:
+            return
         if self._figure is not None:
             manager = pyplot.get_current_fig_manager()
             if manager is not None:

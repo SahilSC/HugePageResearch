@@ -1,0 +1,43 @@
+---
+# Compaction data collection config for Redis (YCSB workload)
+# THP=always to generate huge pages; kernel-5.15-compatible hooks.
+#
+# Hooks:
+#   mm_rss_stat     — per-process RSS changes (bloat proxy)
+#   memory_usage    — /proc/meminfo polling (anon_hugepages, mem_free, etc.)
+#   perf            — dTLB/iTLB misses, TLB flushes (utility proxy)
+#   process_trace   — PID-to-process mapping + benchmark window
+#
+# NOTE: collapse_huge_pages / madvise / unmap_range require kernel 6.x kprobes
+#       and are intentionally excluded for 5.15 compatibility.
+#
+# Increase record_count / operation_count for longer, more representative runs.
+benchmark_config:
+  generic:
+    benchmark: redis
+    cpus: 0
+    skip_clear_page_cache: false
+    transparent_hugepages: always
+    overcommit_memory: never_check
+  redis:
+    record_count: 100
+    operation_count: 100
+    read_proportion: 0.25
+    update_proportion: 0.25
+    insert_proportion: 0.10
+    rmw_proportion: 0.10
+    scan_proportion: 0.0
+    delete_proportion: 0.30
+    request_distribution: "zipfian"
+collector_config:
+  generic:
+    poll_rate: 0.1
+    output_dir: data
+    output_graphs: false
+    hooks:
+      - mm_rss_stat
+      - memory_usage
+      - perf
+      - process_trace
+      - smaps_harness
+      - vmstat_harness
