@@ -1,0 +1,35 @@
+---
+benchmark_config:
+  generic:
+    benchmark: redis
+    cpus: 0
+    skip_clear_page_cache: false
+    transparent_hugepages: always
+    overcommit_memory: never_check
+  redis:
+    repeat: 10
+    record_count: 50000
+    operation_count: 1000000
+    field_count: 1
+    field_length: 1024
+    min_field_length: 1024
+    read_proportion: 0.50
+    update_proportion: 0.20
+    insert_proportion: 0.10
+    rmw_proportion: 0.10
+    scan_proportion: 0.00
+    delete_proportion: 0.10
+    request_distribution: "uniform"
+    explicit_purge: true
+    sleep: "5s"
+collector_config:
+  generic:
+    poll_rate: 0.1
+    output_dir: data
+    output_graphs: false
+    hooks:
+      - mm_rss_stat
+      - process_trace
+      - madvise
+      - perf
+      - unmap_range
