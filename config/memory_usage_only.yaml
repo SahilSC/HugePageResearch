@@ -1,0 +1,18 @@
+---
+benchmark_config:
+  generic:
+    benchmark: faux
+    skip_clear_page_cache: true
+    transparent_hugepages: always
+    overcommit_memory: no_change
+    khugepaged_scan_sleep_millis: 86400000 
+  faux: {}
+collector_config:
+  generic:
+    poll_rate: 0.25
+    output_dir: data
+    output_dfs: false
+    output_graphs: true
+    hooks:
+      - memory_usage
+      - perf

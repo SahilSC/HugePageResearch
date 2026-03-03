@@ -100,26 +100,16 @@ class PerfBPFHook(BPFProgram):
         fn_name: bytes,
         sample_freq: int,
     ) -> None:
+        self.bpf.attach_perf_event(
+            ev_type=ev_type,
+            ev_config=ev_config,
+            fn_name=fn_name,
+            sample_freq=sample_freq,
+            cpu=-1,
+            group_fd=-1,
+        )
         if self.group_fds is None:
-            self.bpf.attach_perf_event(
-                ev_type=ev_type,
-                ev_config=ev_config,
-                fn_name=fn_name,
-                sample_freq=sample_freq,
-                cpu=-1,
-                group_fd=-1,
-            )
             self.group_fds = self.bpf.open_perf_events[(ev_type, ev_config)]
-        else:
-            for cpu, group_fd in self.group_fds.items():
-                self.bpf.attach_perf_event(
-                    ev_type=ev_type,
-                    ev_config=ev_config,
-                    fn_name=fn_name,
-                    sample_freq=sample_freq,
-                    cpu=cpu,
-                    group_fd=group_fd,
-                )
 
     def load(self, collection_id: str):
         self.collection_id = collection_id

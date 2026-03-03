@@ -1,7 +1,6 @@
 import os
 import signal
 import sys
-import uuid
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
@@ -65,6 +64,99 @@ def poll_instrumentation(
 
 def signal_handler_factory(event: Event):
     return lambda x, y: event.clear()
+
+
+def _safe_chown(path: Path, ids: tuple[int, int] | None) -> None:
+    if ids is None:
+        return
+    try:
+        os.chown(path, ids[0], ids[1])
+    except PermissionError:
+        # Non-root users may not be able to chown even to the same owner.
+        pass
+
+
+def _discover_redis_server_tgids(process_trace_df: pl.DataFrame) -> set[int]:
+    if "name" not in process_trace_df.columns or "tgid" not in process_trace_df.columns:
+        return set()
+    rows = process_trace_df.filter(pl.col("name").str.starts_with("redis-server"))
+    if rows.is_empty():
+        return set()
+    return set(rows.select("tgid").unique().to_series().to_list())
+
+
+def _clean_redis_collection(
+    *,
+    curated_dir: Path,
+    collection_id: str,
+    verbose: bool,
+    ids: tuple[int, int] | None,
+) -> str | None:
+    benchmark_name = "redis"
+    raw_run_dir = curated_dir / benchmark_name / collection_id
+    if not raw_run_dir.is_dir():
+        print(
+            f"warning: redis cleaner skipped, run directory not found: {raw_run_dir}",
+            file=sys.stderr,
+        )
+        return None
+
+    process_trace_files = sorted(raw_run_dir.glob("process_trace.*.parquet"))
+    if not process_trace_files:
+        raise RuntimeError(
+            "redis cleaner failed fast: missing process_trace parquet "
+            "(add process_trace hook or run with --no-clean)"
+        )
+
+    process_trace_df = pl.concat(
+        [pl.read_parquet(file_path) for file_path in process_trace_files],
+        how="diagonal_relaxed",
+    )
+    redis_tgids = _discover_redis_server_tgids(process_trace_df)
+    if len(redis_tgids) != 1:
+        raise RuntimeError("more than 1 redis_tgids\n" + redis_tgids)
+    
+    if not redis_tgids:
+        raise RuntimeError(
+            "redis cleaner failed fast: could not find redis-server TGID in process_trace "
+            "(run with --no-clean to skip cleaning)"
+        )
+
+    cleaned_collection_id = f"cleaned{collection_id}"
+    cleaned_run_dir = curated_dir / benchmark_name / cleaned_collection_id
+    cleaned_run_dir.mkdir(parents=True, exist_ok=False)
+    _safe_chown(cleaned_run_dir, ids)
+
+    if verbose:
+        sorted_tgids = ", ".join(str(tgid) for tgid in sorted(redis_tgids))
+        print(f"Redis cleaner target TGID(s): {sorted_tgids}")
+
+    for parquet_file in sorted(raw_run_dir.glob("*.parquet")):
+        table_df = pl.read_parquet(parquet_file)
+        before_rows = len(table_df)
+
+        if "tgid" in table_df.columns:
+            table_df = table_df.filter(pl.col("tgid").is_in(sorted(redis_tgids)))
+        else:
+            print(f"redis cleaner info: {parquet_file.name} has no tgid; copied without filtering")
+
+        if "collection_id" in table_df.columns:
+            table_df = table_df.with_columns(pl.lit(cleaned_collection_id).alias("collection_id"))
+
+        out_file = cleaned_run_dir / parquet_file.name
+        table_df.write_parquet(out_file)
+        _safe_chown(out_file, ids)
+
+        if verbose and ("pid" in table_df.columns or "tgid" in table_df.columns):
+            after_rows = len(table_df)
+            removed = before_rows - after_rows
+            pct = (removed / before_rows * 100.0) if before_rows else 0.0
+            print(
+                f"redis cleaner {parquet_file.name}: {before_rows} -> {after_rows} rows "
+                f"({pct:.1f}% removed)"
+            )
+
+    return cleaned_collection_id
 
 
 def output_collections_to_file(
@@ -135,10 +227,11 @@ def output_data_thread(
 
 def run_collect(
     *,
-    collector_config: ConfigBase,
+    config: ConfigBase,
     benchmark: Benchmark,
     verbose: bool,
     collection_prefix: str | None,
+    clean: bool,
 ):
     if not benchmark.is_configured():
         raise BenchmarkNotConfiguredError(
@@ -147,12 +240,15 @@ def run_collect(
     benchmark.setup()
 
     generic_config = cast(
-        data_collection.GenericCollectorConfig, getattr(collector_config, "generic")
+        data_collection.GenericCollectorConfig,
+        getattr(getattr(config, "collector_config"), "generic"),
     )
-    bpf_programs = generic_config.get_hooks()
+    bpf_programs = generic_config.get_hooks(
+        hugepage_harness=getattr(config, "hugepage_harness", None)
+    )
     system_info = data_collection.machine_info().to_polars()
     system_info = system_info.unnest(system_info.columns)
-    collection_id = str(uuid.uuid4())
+    collection_id = datetime.now().strftime("%Y%m%dT%H%M%S%f")
     if collection_prefix:
         collection_id = f"{collection_prefix}-{collection_id}"
     output_dir = (
@@ -244,6 +340,7 @@ def run_collect(
         data_schema.SystemInfoTable.from_df(
             system_info.with_columns(
                 [
+                    pl.lit(collection_id).alias("collection_id"),
                     pl.lit(collection_time_sec).alias("collection_time_sec"),
                     pl.lit(os.getpid()).alias("collection_pid"),
                     pl.lit(benchmark.name()).alias("benchmark_name"),
@@ -276,5 +373,18 @@ def run_collect(
             use_matplot=True,
             show=False,
         )
-    print(f"{collection_id}")
+
+    cleaned_collection_id: str | None = None
+    if clean and benchmark.name() == "redis":
+        cleaned_collection_id = _clean_redis_collection(
+            curated_dir=generic_config.get_output_dir() / "curated",
+            collection_id=collection_id,
+            verbose=verbose,
+            ids=(user_id, group_id),
+        )
+
+    print(f"Collection_id: {collection_id}")
+    if cleaned_collection_id is not None:
+        print(f"Cleaned_collection_id: {cleaned_collection_id}")
+
     return return_code

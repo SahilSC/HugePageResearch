@@ -238,6 +238,8 @@ class SmapsRollupSampleTable(_BaseTHPTable):
             "anonymous_kb": pl.Int64(),
             "referenced_kb": pl.Int64(),
             "anon_hugepages_kb": pl.Int64(),
+            "ra_pages_kb": pl.Int64(),
+            "ra_state": pl.Int64(),
             "collection_id": pl.String(),
         }
     )
@@ -257,6 +259,8 @@ class SmapsVMARegionSampleTable(_BaseTHPTable):
             "referenced_kb": pl.Int64(),
             "anon_hugepages_kb": pl.Int64(),
             "thp_eligible": pl.Int64(),
+            "ra_pages_kb": pl.Int64(),
+            "ra_state": pl.Int64(),
             "vm_flags": pl.String(),
             "collection_id": pl.String(),
         }

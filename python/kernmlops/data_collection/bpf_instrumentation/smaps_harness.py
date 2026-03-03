@@ -27,6 +27,8 @@ class SmapsRollupSample:
     anonymous_kb: int
     referenced_kb: int
     anon_hugepages_kb: int
+    ra_pages_kb: int
+    ra_state: int
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,8 @@ class SmapsVMARegionSample:
     referenced_kb: int
     anon_hugepages_kb: int
     thp_eligible: int
+    ra_pages_kb: int
+    ra_state: int
     vm_flags: str
 
 
@@ -189,6 +193,8 @@ class SmapsHarnessHook(BPFProgram):
                 anonymous_kb=self._parse_rollup_value(raw, "Anonymous"),
                 referenced_kb=self._parse_rollup_value(raw, "Referenced"),
                 anon_hugepages_kb=self._parse_rollup_value(raw, "AnonHugePages"),
+                ra_pages_kb=self._parse_rollup_value(raw, "Ra_pages"),
+                ra_state=self._parse_rollup_value(raw, "Ra_state"),
             )
         )
 
@@ -249,6 +255,8 @@ class SmapsHarnessHook(BPFProgram):
         referenced_kb = 0
         anon_hugepages_kb = 0
         thp_eligible = 0
+        ra_pages_kb = 0
+        ra_state = 0
         vm_flags = ""
 
         def maybe_emit():
@@ -268,6 +276,8 @@ class SmapsHarnessHook(BPFProgram):
                     referenced_kb=referenced_kb,
                     anon_hugepages_kb=anon_hugepages_kb,
                     thp_eligible=thp_eligible,
+                    ra_pages_kb=ra_pages_kb,
+                    ra_state=ra_state,
                     vm_flags=vm_flags,
                 )
             )
@@ -286,6 +296,8 @@ class SmapsHarnessHook(BPFProgram):
                 referenced_kb = 0
                 anon_hugepages_kb = 0
                 thp_eligible = 0
+                ra_pages_kb = 0
+                ra_state = 0
                 vm_flags = ""
                 continue
             if line.startswith("Rss:"):
@@ -296,6 +308,10 @@ class SmapsHarnessHook(BPFProgram):
                 referenced_kb = int(line.split()[1])
             elif line.startswith("AnonHugePages:"):
                 anon_hugepages_kb = int(line.split()[1])
+            elif line.startswith("Ra_pages:"):
+                ra_pages_kb = int(line.split()[1])
+            elif line.startswith("Ra_state:"):
+                ra_state = int(line.split()[1])
             elif line.startswith("THPeligible:"):
                 thp_eligible = int(line.split()[1])
             elif line.startswith("VmFlags:"):

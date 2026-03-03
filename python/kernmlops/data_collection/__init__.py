@@ -5,7 +5,6 @@ from data_collection import bpf_instrumentation as bpf
 from data_collection.system_info import machine_info
 from kernmlops_config import ConfigBase
 
-
 @dataclass(frozen=True)
 class GenericCollectorConfig(ConfigBase):
     poll_rate: float = 0.5
@@ -18,12 +17,17 @@ class GenericCollectorConfig(ConfigBase):
     def get_output_dir(self) -> Path:
         return Path(self.output_dir)
 
-    def get_hooks(self) -> list[bpf.BPFProgram]:
-        return [
-            hook()
-            for hook_name, hook in bpf.all_hooks.items()
-            if hook_name in self.hooks
-        ]
+    def get_hooks(self, hugepage_harness: ConfigBase | None = None) -> list[bpf.BPFProgram]:
+        hooks = []
+        for hook_name in self.hooks:
+            hook_type = bpf.all_hooks.get(hook_name)
+            if hook_type is None:
+                raise ValueError("Hook_name: ", hook_name, "Not found. Ignoring hook.")
+            if hook_name in ["smaps_harness", "vmstat_harness"]:
+                hooks.append(hook_type(hugepage_harness=hugepage_harness))
+            else:
+                hooks.append(hook_type())
+        return hooks
 
 
 CollectorConfig = make_dataclass(

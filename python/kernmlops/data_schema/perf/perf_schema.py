@@ -176,7 +176,7 @@ class RatePerfGraph(CollectionGraph, Protocol):
         )
 
         # group by and plot by cpu
-        def plot_rate(pdf_df: pl.DataFrame) -> None:
+        def plot_rate_cpu(pdf_df: pl.DataFrame) -> None:
             pdf_df_by_cpu = pdf_df.group_by("cpu")
             for cpu, pdf_df_group in pdf_df_by_cpu:
                 self.graph_engine.plot(
@@ -189,8 +189,33 @@ class RatePerfGraph(CollectionGraph, Protocol):
                     .to_list(),
                     label=f"CPU {cpu[0]}",
                 )
+        
+        def plot_rate(pdf_df: pl.DataFrame) -> None:
+            # 1. Group by the actual timestamp column 'ts_uptime_us'
+            pdf_aggregated = (
+                pdf_df.group_by("ts_uptime_us")
+                .agg(
+                    pl.col(self._perf_table.name()).sum(),
+                    pl.col("span_duration_us").sum()
+                )
+                .sort("ts_uptime_us")
+            )
 
-        plot_rate(pdf_df)
+            # 2. Calculate the rate: (events / (duration_us / 1000))
+            # This gives events per millisecond
+            rate_series = (
+                pdf_aggregated.select(self._perf_table.name()) 
+                / (pdf_aggregated.select("span_duration_us") / 1_000.0)
+            ).to_series().to_list()
+
+            # 3. Plot using the internal normalization helper
+            self.graph_engine.plot(
+                self.collection_data.normalize_uptime_sec(pdf_aggregated),
+                rate_series,
+                label="All CPUs (Aggregated)",
+            )
+
+        plot_rate_cpu(pdf_df)
 
     def plot_trends(self) -> None:
         trend_graph_type = self.trend_graph()

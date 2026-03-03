@@ -1,5 +1,6 @@
-# Abstract definition of CollectionTable and logical collection
+"""Abstract definition of CollectionTable and logical collection."""
 
+from collections import defaultdict
 from pathlib import Path
 from typing import Final, Mapping, cast
 
@@ -131,9 +132,17 @@ class CollectionData:
     def __init__(self, collection_tables: Mapping[str, CollectionTable]):
         self._tables = collection_tables
         system_info = self.get(SystemInfoTable)
-        # TODO(Patrick): Add proper error handling
-        assert isinstance(system_info, SystemInfoTable)
-        assert len(system_info.table) == 1
+        if not isinstance(system_info, SystemInfoTable):
+            loaded_tables = ", ".join(sorted(self.tables.keys())) or "<none>"
+            raise ValueError(
+                "missing required 'system_info' table while loading collection data "
+                f"(loaded tables: {loaded_tables})"
+            )
+        if len(system_info.table) != 1:
+            raise ValueError(
+                "expected exactly one row in 'system_info' table, got "
+                f"{len(system_info.table)}"
+            )
         self._system_info = system_info
 
     @property
@@ -243,25 +252,78 @@ class CollectionData:
         collection_id: str,
         table_types: list[type[CollectionTable]],
     ) -> "CollectionData":
+        def _chunk_sort_key(file_path: Path) -> tuple[int, int | str]:
+            parts = file_path.name.split(".")
+            if len(parts) >= 3:
+                chunk = parts[-2]
+                if chunk == "end":
+                    return (1, 0)
+                if chunk.isdigit():
+                    return (0, int(chunk))
+            return (0, file_path.name)
+
+        def _ensure_collection_id(table_df: pl.DataFrame, resolved_id: str) -> pl.DataFrame:
+            if collection_id_column() in table_df.columns:
+                return table_df
+            return table_df.with_columns(pl.lit(resolved_id).alias(collection_id_column()))
+
+        def _load_run_dir(run_dir: Path) -> dict[str, CollectionTable]:
+            grouped: dict[str, list[Path]] = defaultdict(list)
+            for parquet_file in sorted(run_dir.glob("*.parquet"), key=_chunk_sort_key):
+                table_name = parquet_file.name.split(".", maxsplit=1)[0]
+                if table_name in type_map:
+                    grouped[table_name].append(parquet_file)
+
+            collection_tables = dict[str, CollectionTable]()
+            for table_name, parquet_files in grouped.items():
+                dfs = [pl.read_parquet(file_path) for file_path in parquet_files]
+                table_df = (
+                    dfs[0] if len(dfs) == 1 else pl.concat(dfs, how="diagonal_relaxed")
+                )
+                table_df = _ensure_collection_id(table_df, run_dir.name)
+                collection_tables[table_name] = type_map[table_name].from_df(table_df)
+            return collection_tables
+
         collection_tables = dict[str, CollectionTable]()
         type_map = _type_map(table_types)
-        dataframe_dirs = [
-            x for x in data_dir.iterdir() if x.is_dir() and x.name in type_map
+
+        # Preferred/current layout written by `collect data`:
+        #   data/curated/<benchmark>/<collection_id>/<table>.<chunk>.parquet
+        run_dirs = [
+            run_dir
+            for benchmark_dir in data_dir.iterdir()
+            if benchmark_dir.is_dir()
+            for run_dir in benchmark_dir.iterdir()
+            if run_dir.is_dir() and run_dir.name.startswith(collection_id)
         ]
+        if len(run_dirs) > 1:
+            matches = ", ".join(str(path) for path in sorted(run_dirs))
+            raise ValueError(
+                f"collection id prefix '{collection_id}' matched multiple runs: {matches}"
+            )
+        if len(run_dirs) == 1:
+            collection_tables = _load_run_dir(run_dirs[0])
+            return CollectionData(collection_tables)
+
+        # Legacy layout fallback:
+        #   data/curated/<table_name>/<collection_id>*.parquet
+        dataframe_dirs = [x for x in data_dir.iterdir() if x.is_dir() and x.name in type_map]
         for dataframe_dir in dataframe_dirs:
-            dfs = [
-                pl.read_parquet(x)
-                for x in dataframe_dir.iterdir()
-                if x.is_file()
-                and x.suffix == ".parquet"
-                and x.name.startswith(collection_id)
-            ]
-            # Throw explainable error
-            assert len(dfs) <= 1
-            if dfs:
-                collection_tables[dataframe_dir.name] = type_map[
-                    dataframe_dir.name
-                ].from_df(dfs[0])
+            parquet_files = sorted(
+                [
+                    x
+                    for x in dataframe_dir.iterdir()
+                    if x.is_file() and x.suffix == ".parquet" and x.name.startswith(collection_id)
+                ]
+            )
+            if not parquet_files:
+                continue
+            dfs = [pl.read_parquet(file_path) for file_path in parquet_files]
+            table_df = dfs[0] if len(dfs) == 1 else pl.concat(dfs, how="diagonal_relaxed")
+            table_df = _ensure_collection_id(table_df, collection_id)
+            collection_tables[dataframe_dir.name] = type_map[dataframe_dir.name].from_df(
+                table_df
+            )
         return CollectionData(collection_tables)
 
 

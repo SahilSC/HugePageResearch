@@ -11,7 +11,6 @@ import yaml
 from cli import collect
 from cli.config import KernmlopsConfig
 from click_default_group import DefaultGroup
-from data_collection import GenericCollectorConfig
 from kernmlops_benchmark import benchmarks
 from kernmlops_config import DEFAULT_CONFIG_FILE
 
@@ -59,16 +58,25 @@ def cli_collect():
     type=str,
     help="Prefix to append to the collection id",
 )
+@click.option(
+    "--clean/--no-clean",
+    "clean",
+    default=True,
+    is_flag=True,
+    type=bool,
+    help="Post-process Redis collections into a cleaned copy filtered to redis-server TGID(s)",
+)
 def cli_collect_data(
     config_file: Path,
     benchmark_name: str | None,
     verbose: bool,
     collection_prefix: str | None,
+    clean: bool,
 ):
     """Run data collection tooling."""
+    # print("config_file", config_file)
     config_overrides = yaml.safe_load(config_file.read_text())
     config = KernmlopsConfig().merge(config_overrides)
-    collector_config: GenericCollectorConfig = config.collector_config
     name = (
         benchmark_name
         if benchmark_name
@@ -76,10 +84,11 @@ def cli_collect_data(
     )
     benchmark = benchmarks[name].from_config(config.benchmark_config)
     collect.run_collect(
-        collector_config=collector_config,
+        config=config,
         benchmark=benchmark,
         verbose=verbose,
         collection_prefix=collection_prefix,
+        clean=clean,
     )
 
 
@@ -124,7 +133,7 @@ def cli_collect_dump(input_dir: Path, benchmark_name: str | None):
     "--output-dir",
     "output_dir",
     default=None,
-    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    type=click.Path(file_okay=False, path_type=Path),
 )
 @click.option(
     "-c",
