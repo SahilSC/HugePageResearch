@@ -26,10 +26,10 @@ from pathlib import Path
 
 import polars as pl
 
-
 # ---------------------------------------------------------------------------
 # Parquet loader helpers
 # ---------------------------------------------------------------------------
+
 
 def try_load(base: Path, name: str) -> pl.DataFrame | None:
     """Load a parquet file if it exists, else return None."""
@@ -46,6 +46,7 @@ def try_load(base: Path, name: str) -> pl.DataFrame | None:
 # ---------------------------------------------------------------------------
 # Table 1: page_observations
 # ---------------------------------------------------------------------------
+
 
 def build_page_observations(
     collection_dir: Path,
@@ -64,36 +65,40 @@ def build_page_observations(
         return None
 
     # Compute first-seen timestamp per VMA region for allocation age
-    first_seen = (
-        vma_df.group_by(["start_addr", "end_addr"])
-        .agg(pl.col("ts_ns").min().alias("first_seen_ts_ns"))
+    first_seen = vma_df.group_by(["start_addr", "end_addr"]).agg(
+        pl.col("ts_ns").min().alias("first_seen_ts_ns")
     )
     vma_df = vma_df.join(first_seen, on=["start_addr", "end_addr"], how="left")
 
-    result = vma_df.with_columns([
-        pl.lit(collection_id).alias("collection_id"),
-        pl.lit(benchmark).alias("benchmark"),
-        # Rename ts_ns to observation_ts_ns for clarity
-        pl.col("ts_ns").alias("observation_ts_ns"),
-        # Page identifier: hex of start_addr
-        pl.col("start_addr")
-        .map_elements(lambda x: hex(x), return_dtype=pl.String())
-        .alias("page_id"),
-        # VMA address info (pass through)
-        pl.col("start_addr").alias("vaddr_base"),
-        pl.col("start_addr").alias("vma_start"),
-        pl.col("end_addr").alias("vma_end"),
-        pl.col("pid").alias("pid"),
-        # Bloat estimate: 1 - (referenced / rss), clipped to [0, 1]
-        (
-            1.0 - pl.col("referenced_kb").cast(pl.Float64)
-            / pl.col("rss_kb").cast(pl.Float64).clip(lower_bound=1)
-        ).clip(lower_bound=0.0, upper_bound=1.0).alias("bloat_estimate"),
-        # Allocation age
-        (pl.col("ts_ns") - pl.col("first_seen_ts_ns")).alias("allocation_age_ns"),
-        # PMD mapped flag
-        (pl.col("anon_hugepages_kb") > 0).cast(pl.Int64).alias("pmd_mapped"),
-    ])
+    result = vma_df.with_columns(
+        [
+            pl.lit(collection_id).alias("collection_id"),
+            pl.lit(benchmark).alias("benchmark"),
+            # Rename ts_ns to observation_ts_ns for clarity
+            pl.col("ts_ns").alias("observation_ts_ns"),
+            # Page identifier: hex of start_addr
+            pl.col("start_addr")
+            .map_elements(lambda x: hex(x), return_dtype=pl.String())
+            .alias("page_id"),
+            # VMA address info (pass through)
+            pl.col("start_addr").alias("vaddr_base"),
+            pl.col("start_addr").alias("vma_start"),
+            pl.col("end_addr").alias("vma_end"),
+            pl.col("pid").alias("pid"),
+            # Bloat estimate: 1 - (referenced / rss), clipped to [0, 1]
+            (
+                1.0
+                - pl.col("referenced_kb").cast(pl.Float64)
+                / pl.col("rss_kb").cast(pl.Float64).clip(lower_bound=1)
+            )
+            .clip(lower_bound=0.0, upper_bound=1.0)
+            .alias("bloat_estimate"),
+            # Allocation age
+            (pl.col("ts_ns") - pl.col("first_seen_ts_ns")).alias("allocation_age_ns"),
+            # PMD mapped flag
+            (pl.col("anon_hugepages_kb") > 0).cast(pl.Int64).alias("pmd_mapped"),
+        ]
+    )
 
     # Select and order columns to match the spec
     cols = [
@@ -129,6 +134,7 @@ def build_page_observations(
 # Table 2: system_context
 # ---------------------------------------------------------------------------
 
+
 def build_system_context(
     collection_dir: Path,
     benchmark: str,
@@ -152,40 +158,51 @@ def build_system_context(
             (pl.col("ts_uptime_us") * 1000).alias("observation_ts_ns"),
         )
     else:
-        print(f"  ⚠ No timestamp column in memory_usage")
+        print("  ⚠ No timestamp column in memory_usage")
         return None
 
     # Build memory columns
-    mem_result = mem_df.with_columns([
-        pl.lit(collection_id).alias("collection_id"),
-        pl.lit(benchmark).alias("benchmark"),
-        (pl.col("mem_free_bytes") / (1024 * 1024)).alias("mem_free_mb"),
-        (pl.col("mem_available_bytes") / (1024 * 1024)).alias("mem_available_mb"),
-        (pl.col("anon_hugepages_total_bytes") / (1024 * 1024)).alias("anon_hugepages_mb"),
-        (pl.col("anon_pages_total_bytes") / (1024 * 1024)).alias("anon_pages_mb"),
-        (pl.col("swap_free_bytes") / (1024 * 1024)).alias("swap_free_mb"),
-        (pl.col("swap_total_bytes") / (1024 * 1024)).alias("swap_total_mb"),
-        (pl.col("dirty_bytes") / (1024 * 1024)).alias("dirty_mb"),
-        (pl.col("writeback_bytes") / (1024 * 1024)).alias("writeback_mb"),
-        # Hugepages_Total and Free are already stored as counts (multiplied by 1024 in hook)
-        # Undo the * 1024 from the hook to get actual counts
-        (pl.col("hugepages_total") / 1024).cast(pl.Int64).alias("hugepages_total"),
-        (pl.col("hugepages_free") / 1024).cast(pl.Int64).alias("hugepages_free"),
-        # Hugepage fraction
-        (
-            pl.col("anon_hugepages_total_bytes")
-            / pl.col("anon_pages_total_bytes").clip(lower_bound=1)
-        ).alias("hugepage_fraction"),
-    ])
+    mem_result = mem_df.with_columns(
+        [
+            pl.lit(collection_id).alias("collection_id"),
+            pl.lit(benchmark).alias("benchmark"),
+            (pl.col("mem_free_bytes") / (1024 * 1024)).alias("mem_free_mb"),
+            (pl.col("mem_available_bytes") / (1024 * 1024)).alias("mem_available_mb"),
+            (pl.col("anon_hugepages_total_bytes") / (1024 * 1024)).alias(
+                "anon_hugepages_mb"
+            ),
+            (pl.col("anon_pages_total_bytes") / (1024 * 1024)).alias("anon_pages_mb"),
+            (pl.col("swap_free_bytes") / (1024 * 1024)).alias("swap_free_mb"),
+            (pl.col("swap_total_bytes") / (1024 * 1024)).alias("swap_total_mb"),
+            (pl.col("dirty_bytes") / (1024 * 1024)).alias("dirty_mb"),
+            (pl.col("writeback_bytes") / (1024 * 1024)).alias("writeback_mb"),
+            # Hugepages_Total and Free are already stored as counts (multiplied by 1024 in hook)
+            # Undo the * 1024 from the hook to get actual counts
+            (pl.col("hugepages_total") / 1024).cast(pl.Int64).alias("hugepages_total"),
+            (pl.col("hugepages_free") / 1024).cast(pl.Int64).alias("hugepages_free"),
+            # Hugepage fraction
+            (
+                pl.col("anon_hugepages_total_bytes")
+                / pl.col("anon_pages_total_bytes").clip(lower_bound=1)
+            ).alias("hugepage_fraction"),
+        ]
+    )
 
     # Select memory columns
     mem_cols = [
-        "collection_id", "benchmark", "observation_ts_ns",
-        "mem_free_mb", "mem_available_mb",
-        "anon_hugepages_mb", "anon_pages_mb",
-        "hugepages_free", "hugepages_total",
-        "swap_free_mb", "swap_total_mb",
-        "dirty_mb", "writeback_mb",
+        "collection_id",
+        "benchmark",
+        "observation_ts_ns",
+        "mem_free_mb",
+        "mem_available_mb",
+        "anon_hugepages_mb",
+        "anon_pages_mb",
+        "hugepages_free",
+        "hugepages_total",
+        "swap_free_mb",
+        "swap_total_mb",
+        "dirty_mb",
+        "writeback_mb",
         "hugepage_fraction",
     ]
     result = mem_result.select([c for c in mem_cols if c in mem_result.columns])
@@ -196,17 +213,29 @@ def build_system_context(
         # VMStat has ts_ns; join to closest memory timestamp using asof join
         vmstat_cols_to_keep = [
             "ts_ns",
-            "pgfault", "pgmajfault",
-            "pgmigrate_success", "pgmigrate_fail",
-            "compact_stall", "compact_fail", "compact_success",
+            "pgfault",
+            "pgmajfault",
+            "pgmigrate_success",
+            "pgmigrate_fail",
+            "compact_stall",
+            "compact_fail",
+            "compact_success",
             "compact_daemon_wake",
-            "compact_migrate_scanned", "compact_free_scanned", "compact_isolated",
-            "thp_fault_alloc", "thp_fault_fallback",
-            "thp_collapse_alloc", "thp_collapse_alloc_failed",
-            "thp_split_page", "thp_split_page_failed",
-            "thp_deferred_split_page", "thp_split_pmd",
+            "compact_migrate_scanned",
+            "compact_free_scanned",
+            "compact_isolated",
+            "thp_fault_alloc",
+            "thp_fault_fallback",
+            "thp_collapse_alloc",
+            "thp_collapse_alloc_failed",
+            "thp_split_page",
+            "thp_split_page_failed",
+            "thp_deferred_split_page",
+            "thp_split_pmd",
         ]
-        available_vmstat_cols = [c for c in vmstat_cols_to_keep if c in vmstat_df.columns]
+        available_vmstat_cols = [
+            c for c in vmstat_cols_to_keep if c in vmstat_df.columns
+        ]
         vmstat_sub = vmstat_df.select(available_vmstat_cols).sort("ts_ns")
 
         # Asof join: for each memory observation, find the closest vmstat snapshot
@@ -228,14 +257,16 @@ def build_system_context(
         ("dtlb_walk_duration", "system_dtlb_walk_total"),
     ]:
         perf_df = try_load(collection_dir, perf_name)
-        if perf_df is not None and "cumulative_count" in perf_df.columns and len(perf_df) > 0:
+        if (
+            perf_df is not None
+            and "cumulative_count" in perf_df.columns
+            and len(perf_df) > 0
+        ):
             # Perf data has per-CPU timestamps. Group by nearest observation window.
             # For simplicity, sum across CPUs per timestamp and asof join.
             if "ts_uptime_us" in perf_df.columns:
                 perf_agg = (
-                    perf_df.with_columns(
-                        (pl.col("ts_uptime_us") * 1000).alias("ts_ns")
-                    )
+                    perf_df.with_columns((pl.col("ts_uptime_us") * 1000).alias("ts_ns"))
                     .group_by("ts_ns")
                     .agg(pl.col("cumulative_count").sum().alias(col_name))
                     .sort("ts_ns")
@@ -255,6 +286,7 @@ def build_system_context(
 # ---------------------------------------------------------------------------
 # Table 3: compaction_events
 # ---------------------------------------------------------------------------
+
 
 def build_compaction_events(
     collection_dir: Path,
@@ -308,7 +340,9 @@ def build_compaction_events(
                     if len(before) > 0:
                         last_before = before.row(-1, named=True)
                         entry["referenced_kb_before"] = last_before["referenced_kb"]
-                        entry["anon_hugepages_kb_before"] = last_before["anon_hugepages_kb"]
+                        entry["anon_hugepages_kb_before"] = last_before[
+                            "anon_hugepages_kb"
+                        ]
                         rss = max(last_before["rss_kb"], 1)
                         entry["bloat_estimate"] = round(
                             1.0 - last_before["referenced_kb"] / rss, 4
@@ -319,10 +353,15 @@ def build_compaction_events(
                     if len(after) > 0:
                         first_after = after.row(0, named=True)
                         entry["referenced_kb_after"] = first_after["referenced_kb"]
-                        entry["anon_hugepages_kb_after"] = first_after["anon_hugepages_kb"]
+                        entry["anon_hugepages_kb_after"] = first_after[
+                            "anon_hugepages_kb"
+                        ]
 
                     # Memory freed
-                    if "anon_hugepages_kb_before" in entry and "anon_hugepages_kb_after" in entry:
+                    if (
+                        "anon_hugepages_kb_before" in entry
+                        and "anon_hugepages_kb_after" in entry
+                    ):
                         entry["memory_freed_kb"] = (
                             entry["anon_hugepages_kb_before"]
                             - entry["anon_hugepages_kb_after"]
@@ -334,9 +373,7 @@ def build_compaction_events(
         intervened_decision_ids: set[str] = set()
         if interventions_df is not None and len(interventions_df) > 0:
             if "decision_id" in interventions_df.columns:
-                intervened_decision_ids = set(
-                    interventions_df["decision_id"].to_list()
-                )
+                intervened_decision_ids = set(interventions_df["decision_id"].to_list())
 
         for row in candidates_df.iter_rows(named=True):
             if row.get("decision_id") in intervened_decision_ids:
@@ -379,6 +416,7 @@ def build_compaction_events(
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def write_table(df: pl.DataFrame, name: str, output_dir: Path):
     """Write a DataFrame as both parquet and CSV."""
@@ -474,9 +512,9 @@ def main():
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  Output Summary")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
     tables_written = 0
 
@@ -502,7 +540,9 @@ def main():
         tables_written += 1
         print(f"    Columns: {combined.columns}")
     else:
-        print("  ⚠ compaction_events: No data (need smaps_harness hook with interventions)")
+        print(
+            "  ⚠ compaction_events: No data (need smaps_harness hook with interventions)"
+        )
 
     if tables_written == 0:
         print("\nNo tables produced. Ensure hooks are enabled in your config:")

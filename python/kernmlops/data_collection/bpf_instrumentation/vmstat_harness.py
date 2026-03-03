@@ -8,7 +8,6 @@ from data_collection.bpf_instrumentation.bpf_hook import BPFProgram
 from data_schema import CollectionTable
 from data_schema.thp_harness import VMStatSampleTable
 
-
 VMSTAT_KEYS = (
     "pgfault",
     "pgmajfault",

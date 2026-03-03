@@ -27,10 +27,10 @@ from pathlib import Path
 # Benchmark → config mapping
 # ---------------------------------------------------------------------------
 BENCHMARK_CONFIGS = {
-    "redis":       "config/compaction_redis.yaml",
-    "gap":         "config/compaction_gap.yaml",
-    "mongodb":     "config/compaction_mongodb.yaml",
-    "memcached":   "config/compaction_memcached.yaml",
+    "redis": "config/compaction_redis.yaml",
+    "gap": "config/compaction_gap.yaml",
+    "mongodb": "config/compaction_mongodb.yaml",
+    "memcached": "config/compaction_memcached.yaml",
     "linux_build": "config/compaction_linux_build.yaml",
 }
 
@@ -88,7 +88,9 @@ def check_benchmark_setup(benchmarks: list[str]) -> bool:
     return False
 
 
-def run_single_collection(benchmark: str, config_path: str, verbose: bool) -> str | None:
+def run_single_collection(
+    benchmark: str, config_path: str, verbose: bool
+) -> str | None:
     """
     Run a single data collection pass for the given benchmark.
 
@@ -100,15 +102,16 @@ def run_single_collection(benchmark: str, config_path: str, verbose: bool) -> st
         "python/kernmlops",
         "collect",
         "data",
-        "-c", config_path,
+        "-c",
+        config_path,
     ]
     if verbose:
         cmd.append("-v")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  Running: {benchmark}  (config: {config_path})")
     print(f"  Command: {' '.join(cmd)}")
-    print(f"{'='*60}\n", flush=True)
+    print(f"{'=' * 60}\n", flush=True)
 
     # Stream output directly to terminal (no capture)
     result = subprocess.run(cmd)
@@ -159,7 +162,8 @@ def main():
         help="Base output directory (default: data).",
     )
     parser.add_argument(
-        "-v", "--verbose",
+        "-v",
+        "--verbose",
         action="store_true",
         help="Pass -v to the collect command.",
     )
@@ -184,7 +188,7 @@ def main():
     total = len(benchmarks) * args.runs_per_benchmark
     done = 0
 
-    print(f"\nCompaction Data Collection")
+    print("\nCompaction Data Collection")
     print(f"  Benchmarks : {', '.join(benchmarks)}")
     print(f"  Runs each  : {args.runs_per_benchmark}")
     print(f"  Total runs : {total}")
@@ -193,7 +197,9 @@ def main():
     for bm in benchmarks:
         for run_idx in range(args.runs_per_benchmark):
             done += 1
-            print(f"\n[{done}/{total}] {bm} run {run_idx + 1}/{args.runs_per_benchmark}")
+            print(
+                f"\n[{done}/{total}] {bm} run {run_idx + 1}/{args.runs_per_benchmark}"
+            )
             cid = run_single_collection(bm, BENCHMARK_CONFIGS[bm], args.verbose)
             if cid:
                 manifest[bm].append(cid)

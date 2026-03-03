@@ -68,5 +68,7 @@ class InstructionsRateGraph(RatePerfGraph):
     def with_graph_engine(cls, graph_engine: GraphEngine) -> CollectionGraph | None:
         perf_table = graph_engine.collection_data.get(cls.perf_table_type())
         if perf_table is not None:
-            return InstructionsRateGraph(graph_engine=graph_engine, perf_table=perf_table)
+            return InstructionsRateGraph(
+                graph_engine=graph_engine, perf_table=perf_table
+            )
         return None

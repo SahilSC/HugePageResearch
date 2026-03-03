@@ -116,7 +116,9 @@ class SmapsHarnessHook(BPFProgram):
                 "/sys/kernel/debug/split_huge_pages",
             )
         )
-        age_weights = list(getattr(hugepage_harness, "age_bucket_weights", [0.4, 0.4, 0.2]))
+        age_weights = list(
+            getattr(hugepage_harness, "age_bucket_weights", [0.4, 0.4, 0.2])
+        )
         self.age_bucket_weights = {
             "young": float(age_weights[0]) if len(age_weights) > 0 else 0.4,
             "mid": float(age_weights[1]) if len(age_weights) > 1 else 0.4,
@@ -398,8 +400,14 @@ class SmapsHarnessHook(BPFProgram):
             self.last_seen_ref[key] = region.referenced_kb
             if prev_ref is None:
                 continue
-            if abs(region.referenced_kb - prev_ref) <= 32 and region.anon_hugepages_kb > 0:
-                if now_ns - self.last_negative_sample_ns >= self.negative_sample_interval_ns:
+            if (
+                abs(region.referenced_kb - prev_ref) <= 32
+                and region.anon_hugepages_kb > 0
+            ):
+                if (
+                    now_ns - self.last_negative_sample_ns
+                    >= self.negative_sample_interval_ns
+                ):
                     self.last_negative_sample_ns = now_ns
                     self._emit_candidate(
                         pid=pid,
