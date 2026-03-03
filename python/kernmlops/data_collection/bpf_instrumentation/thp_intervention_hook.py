@@ -85,10 +85,10 @@ class THPInterventionRow:
     command: str
 
 
-class SmapsHarnessHook(BPFProgram):
+class THPInterventionHook(BPFProgram):
     @classmethod
     def name(cls) -> str:
-        return "smaps_harness"
+        return "thp_intervention"
 
     def __init__(self, hugepage_harness: Any | None = None):
         self.collection_id = ""
@@ -159,9 +159,8 @@ class SmapsHarnessHook(BPFProgram):
         for pid_dir in proc.iterdir():
             if not pid_dir.name.isdigit():
                 continue
-            comm_path = pid_dir / "comm"
             try:
-                comm = comm_path.read_text().strip()
+                comm = (pid_dir / "comm").read_text().strip()
             except Exception:
                 continue
             if self.pid_regex.search(comm):
@@ -199,48 +198,6 @@ class SmapsHarnessHook(BPFProgram):
                 ra_state=self._parse_rollup_value(raw, "Ra_state"),
             )
         )
-
-    def _emit_candidate(
-        self,
-        *,
-        pid: int,
-        ts_ns: int,
-        candidate_type: str,
-        start_addr: int,
-        end_addr: int,
-        referenced_kb: int,
-        anon_hugepages_kb: int,
-        thp_eligible: int,
-        recent_scan_hit: int,
-    ) -> str:
-        key = (start_addr, end_addr)
-        first_seen_ns = self.first_seen_ns.get(key, ts_ns)
-        age_sec = float((ts_ns - first_seen_ns) / 1e9)
-        self.decision_counter += 1
-        decision_id = f"{self.collection_id}-cand-{self.decision_counter}"
-        self.candidates.append(
-            THPCandidateRow(
-                decision_id=decision_id,
-                pid=pid,
-                tgid=pid,
-                ts_ns=ts_ns,
-                candidate_type=candidate_type,
-                mm="",
-                pfn=0,
-                start_addr=start_addr,
-                end_addr=end_addr,
-                age_sec=age_sec,
-                age_censored=True,
-                referenced=referenced_kb,
-                none_or_zero=0,
-                writable=0,
-                scan_status=0,
-                anon_hugepages_kb=anon_hugepages_kb,
-                thp_eligible=thp_eligible,
-                recent_scan_hit=recent_scan_hit,
-            )
-        )
-        return decision_id
 
     def _parse_smaps(self, pid: int, now_ns: int) -> list[SmapsVMARegionSample]:
         smaps_path = Path(f"/proc/{pid}/smaps")
@@ -321,12 +278,58 @@ class SmapsHarnessHook(BPFProgram):
         maybe_emit()
         return samples
 
+    def _emit_candidate(
+        self,
+        *,
+        pid: int,
+        ts_ns: int,
+        candidate_type: str,
+        start_addr: int,
+        end_addr: int,
+        referenced_kb: int,
+        anon_hugepages_kb: int,
+        thp_eligible: int,
+        recent_scan_hit: int,
+    ) -> str:
+        key = (start_addr, end_addr)
+        first_seen_ns = self.first_seen_ns.get(key, ts_ns)
+        age_sec = float((ts_ns - first_seen_ns) / 1e9)
+        self.decision_counter += 1
+        decision_id = f"{self.collection_id}-cand-{self.decision_counter}"
+        self.candidates.append(
+            THPCandidateRow(
+                decision_id=decision_id,
+                pid=pid,
+                tgid=pid,
+                ts_ns=ts_ns,
+                candidate_type=candidate_type,
+                mm="",
+                pfn=0,
+                start_addr=start_addr,
+                end_addr=end_addr,
+                age_sec=age_sec,
+                age_censored=True,
+                referenced=referenced_kb,
+                none_or_zero=0,
+                writable=0,
+                scan_status=0,
+                anon_hugepages_kb=anon_hugepages_kb,
+                thp_eligible=thp_eligible,
+                recent_scan_hit=recent_scan_hit,
+            )
+        )
+        return decision_id
+
     def _select_stratified_region(
         self, regions: list[SmapsVMARegionSample], now_ns: int
     ) -> SmapsVMARegionSample | None:
         if not regions:
             return None
-        by_bucket = {"young": [], "mid": [], "old": []}
+        by_bucket: dict[str, list[SmapsVMARegionSample]] = {
+            "young": [],
+            "mid": [],
+            "old": [],
+        }
         for region in regions:
             key = (region.start_addr, region.end_addr)
             first_seen = self.first_seen_ns.get(key, now_ns)

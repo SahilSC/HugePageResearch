@@ -28,9 +28,14 @@ class GenericCollectorConfig(ConfigBase):
             hook_type = bpf.all_hooks.get(hook_name)
             if hook_type is None:
                 raise ValueError("Hook_name: ", hook_name, "Not found. Ignoring hook.")
-            if hook_name in ["smaps_harness", "vmstat_harness"]:
+            if hook_name in ["thp_intervention", "vmstat_harness"]:
                 hooks.append(hook_type(hugepage_harness=hugepage_harness))
-            elif hook_name == "proc_maps" and benchmark is not None:
+            elif hook_name == "vaptr" and benchmark is not None:
+                num_keys = getattr(
+                    getattr(benchmark, "config", None), "vaptr_num_keys", 10
+                )
+                hooks.append(hook_type(num_keys=num_keys))
+            elif hook_name in ["proc_maps", "smaps_hook"] and benchmark is not None:
                 process_name = getattr(
                     benchmark,
                     "redis_server_name",

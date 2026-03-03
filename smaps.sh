@@ -16,13 +16,17 @@ for run in $(seq 1 $NUM_RUNS); do
 
     # Start redis-server in background
     redis-server "$REDIS_CONF" --dir /tmp --logfile "" &
-    
-    # Wait a couple of seconds
-    sleep 2
-    
-    # Grab the PID of the redis-server we just started
     REDIS_PID=$!
     echo "redis-server PID: $REDIS_PID"
+
+    # Wait until redis is ready (up to 10 pings)
+    for i in $(seq 1 10); do
+        if redis-cli ping 2>/dev/null | grep -q PONG; then
+            echo "Redis ready"
+            break
+        fi
+        sleep 0.5
+    done
 
     # Collect smaps every second for DURATION seconds
     for sec in $(seq 1 $DURATION); do

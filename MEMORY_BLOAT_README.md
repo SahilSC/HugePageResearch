@@ -366,6 +366,12 @@ Estimated Bloat: -13.17 MB (-3.9%)
 
 > **Interpretation**: A negative bloat number means THP actually *saved* memory (likely due to reduced page table overhead). Use a workload with sparse access patterns (random writes to large arrays) to induce positive bloat.
 
+Can also do 
+python python/kernmlops/analysis/compare_maps.py \
+  data/curated/redis/20260303T185825368648 \
+  data/curated/redis/20260303T185703009111 \
+  --percentages 50 100
+
 ---
 
 ## Understanding the Configuration Files

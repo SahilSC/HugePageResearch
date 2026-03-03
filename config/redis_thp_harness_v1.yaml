@@ -34,7 +34,7 @@ collector_config:
       - perf
       - thp_trace
       - vmstat_harness
-      - smaps_harness
+      - smaps_hook
   hugepage_harness:
     enabled: true
     redis_name_regex: "redis-server"

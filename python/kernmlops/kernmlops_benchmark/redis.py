@@ -46,6 +46,7 @@ class RedisConfig(ConfigBase):
     server_sleep: str | None = None
     explicit_purge: bool = False
     load_from_rdb: bool = False
+    vaptr_num_keys: int = 10
 
 
 size_redis = [
@@ -108,6 +109,8 @@ class RedisBenchmark(Benchmark):
         start_redis = [
             self.redis_server_name(),
             "./config/redis.conf",
+            "--loadmodule",
+            "./redis-module/vaptr.so",
         ]
         self.server = subprocess.Popen(start_redis)
 

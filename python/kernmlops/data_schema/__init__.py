@@ -11,6 +11,8 @@ from data_schema.generic_table import ProcessMetadataTable
 from data_schema.huge_pages import CollapseHugePageDataTable
 from data_schema.memory_usage import MemoryUsageTable
 from data_schema.proc_maps import ProcMapsTable
+from data_schema.proc_smaps import ProcSmapsTable
+from data_schema.vaptr import VAPtrTable
 from data_schema.quanta_runtime import QuantaQueuedTable, QuantaRuntimeTable
 from data_schema.schema import (
     UPTIME_TIMESTAMP,
@@ -35,6 +37,8 @@ table_types: list[type[CollectionTable]] = [
     BlockIOTable,
     CollapseHugePageDataTable,
     ProcMapsTable,
+    ProcSmapsTable,
+    VAPtrTable,
 ] + list(perf.perf_table_types.values())
 
 

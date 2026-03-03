@@ -6,8 +6,9 @@ benchmark_config:
     skip_clear_page_cache: false
     transparent_hugepages: always
     overcommit_memory: never_check
+    khugepaged_scan_sleep_millis: 8640000
   redis:
-    repeat: 10
+    repeat: 1
     record_count: 50000
     operation_count: 1000000
     field_count: 1
@@ -31,5 +32,6 @@ collector_config:
       - mm_rss_stat
       - process_trace
       - madvise
-      - perf
+      # - perf
+      - proc_maps
       - unmap_range

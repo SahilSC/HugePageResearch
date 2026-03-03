@@ -25,7 +25,7 @@ collector_config:
       - mm_rss_stat
       - process_trace
       - perf
-      # - smaps_harness
+      # - smaps_hook
       # - vmstat_harness
 hugepage_harness:
   smaps_rollup_interval_ms: 100
