@@ -193,3 +193,5 @@ module/*.img
 benchmark/zswap/results/
 *.lock
 typescript
+logs/*
+CLAUDE.md

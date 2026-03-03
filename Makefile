@@ -136,6 +136,13 @@ benchmark-redis:
 		-c ${KERNMLOPS_CONFIG_FILE} \
 		--benchmark redis
 
+benchmark-redis-log:
+	@mkdir -p data/curated/redis/logs/
+	@python python/kernmlops collect -v \
+		-c ${KERNMLOPS_CONFIG_FILE} \
+		--benchmark redis \
+		2>&1 | tee data/curated/redis/logs/$(notdir $(basename ${KERNMLOPS_CONFIG_FILE})).log
+
 start-memcached:
 	@echo "Starting memcached server..."
 	@memcached -d -l 0.0.0.0 -p $(MEMCACHED_PORT) -u root

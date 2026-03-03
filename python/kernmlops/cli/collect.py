@@ -244,7 +244,8 @@ def run_collect(
         getattr(getattr(config, "collector_config"), "generic"),
     )
     bpf_programs = generic_config.get_hooks(
-        hugepage_harness=getattr(config, "hugepage_harness", None)
+        hugepage_harness=getattr(config, "hugepage_harness", None),
+        benchmark=benchmark,
     )
     system_info = data_collection.machine_info().to_polars()
     system_info = system_info.unnest(system_info.columns)

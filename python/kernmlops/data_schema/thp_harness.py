@@ -418,7 +418,9 @@ class THPCandidateRateGraph(CollectionGraph):
         self.table = table
 
     def name(self) -> str:
-        return f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        return (
+            f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        )
 
     def x_axis(self) -> str:
         return "Runtime (sec)"
@@ -431,11 +433,21 @@ class THPCandidateRateGraph(CollectionGraph):
         if df.is_empty():
             return
         base_ts = int(df["ts_ns"].min())
-        bucket_df = df.with_columns(
-            (((pl.col("ts_ns") - base_ts) / 1_000_000_000).floor().cast(pl.Int64())).alias("sec")
-        ).group_by(["sec", "candidate_type"]).len()
+        bucket_df = (
+            df.with_columns(
+                (
+                    ((pl.col("ts_ns") - base_ts) / 1_000_000_000)
+                    .floor()
+                    .cast(pl.Int64())
+                ).alias("sec")
+            )
+            .group_by(["sec", "candidate_type"])
+            .len()
+        )
         for candidate_type in sorted(bucket_df["candidate_type"].unique().to_list()):
-            subtype = bucket_df.filter(pl.col("candidate_type") == candidate_type).sort("sec")
+            subtype = bucket_df.filter(pl.col("candidate_type") == candidate_type).sort(
+                "sec"
+            )
             self.graph_engine.plot(
                 subtype["sec"].cast(pl.Float64).to_list(),
                 subtype["len"].cast(pl.Float64).to_list(),
@@ -463,7 +475,9 @@ class THPAgeDistributionGraph(CollectionGraph):
         self.table = table
 
     def name(self) -> str:
-        return f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        return (
+            f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        )
 
     def x_axis(self) -> str:
         return "Runtime (sec)"
@@ -476,7 +490,9 @@ class THPAgeDistributionGraph(CollectionGraph):
         if df.is_empty():
             return
         for candidate_type in sorted(df["candidate_type"].unique().to_list()):
-            subtype = df.filter(pl.col("candidate_type") == candidate_type).sort("ts_ns")
+            subtype = df.filter(pl.col("candidate_type") == candidate_type).sort(
+                "ts_ns"
+            )
             self.graph_engine.scatter(
                 _seconds_from_ts(subtype["ts_ns"]),
                 subtype["age_sec"].cast(pl.Float64).to_list(),
@@ -504,7 +520,9 @@ class THPTranslationPressureGraph(CollectionGraph):
         self.table = table
 
     def name(self) -> str:
-        return f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        return (
+            f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        )
 
     def x_axis(self) -> str:
         return "Runtime (sec)"
@@ -517,8 +535,16 @@ class THPTranslationPressureGraph(CollectionGraph):
         if df.is_empty():
             return
         x_data = _seconds_from_ts(df["ts_ns"])
-        self.graph_engine.plot(x_data, df["miss_rate_pre"].cast(pl.Float64).to_list(), label="miss_rate_pre")
-        self.graph_engine.plot(x_data, df["walk_rate_pre"].cast(pl.Float64).to_list(), label="walk_rate_pre")
+        self.graph_engine.plot(
+            x_data,
+            df["miss_rate_pre"].cast(pl.Float64).to_list(),
+            label="miss_rate_pre",
+        )
+        self.graph_engine.plot(
+            x_data,
+            df["walk_rate_pre"].cast(pl.Float64).to_list(),
+            label="walk_rate_pre",
+        )
 
     def plot_trends(self) -> None:
         pass
@@ -541,7 +567,9 @@ class THPLabelBalanceGraph(CollectionGraph):
         self.table = table
 
     def name(self) -> str:
-        return f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        return (
+            f"{self.base_name()} for Collection {self.graph_engine.collection_data.id}"
+        )
 
     def x_axis(self) -> str:
         return "Label"
@@ -555,7 +583,9 @@ class THPLabelBalanceGraph(CollectionGraph):
             return
         split_count = int(df.filter(pl.col("label_split_preferred")).height)
         keep_count = int(df.filter(pl.col("label_keep_preferred")).height)
-        self.graph_engine.scatter([0.0, 1.0], [float(keep_count), float(split_count)], label="counts")
+        self.graph_engine.scatter(
+            [0.0, 1.0], [float(keep_count), float(split_count)], label="counts"
+        )
 
     def plot_trends(self) -> None:
         pass
@@ -589,4 +619,3 @@ def age_bucket_for(age_sec: float | None, *, censored: bool) -> str:
         ):
             return bucket.name
     return "unknown"
-

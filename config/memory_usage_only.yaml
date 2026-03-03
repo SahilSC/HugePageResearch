@@ -1,7 +1,7 @@
 ---
 benchmark_config:
   generic:
-    benchmark: faux
+    benchmark: redis
     skip_clear_page_cache: true
     transparent_hugepages: always
     overcommit_memory: no_change
@@ -15,4 +15,3 @@ collector_config:
     output_graphs: true
     hooks:
       - memory_usage
-      - perf

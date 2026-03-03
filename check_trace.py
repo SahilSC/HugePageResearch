@@ -1,6 +1,4 @@
-
 import polars as pl
-import sys
 
 # Load process trace
 base_dir = "data/curated/redis/3eee00c3-9a1a-42ce-9241-2ce452f4c604"

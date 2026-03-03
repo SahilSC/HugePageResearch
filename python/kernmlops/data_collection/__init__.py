@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field, make_dataclass
 from pathlib import Path
+from typing import Any
 
 from data_collection import bpf_instrumentation as bpf
 from data_collection.system_info import machine_info
@@ -17,7 +18,11 @@ class GenericCollectorConfig(ConfigBase):
     def get_output_dir(self) -> Path:
         return Path(self.output_dir)
 
-    def get_hooks(self, hugepage_harness: ConfigBase | None = None) -> list[bpf.BPFProgram]:
+    def get_hooks(
+        self,
+        hugepage_harness: ConfigBase | None = None,
+        benchmark: Any | None = None,
+    ) -> list[bpf.BPFProgram]:
         hooks = []
         for hook_name in self.hooks:
             hook_type = bpf.all_hooks.get(hook_name)
@@ -25,6 +30,13 @@ class GenericCollectorConfig(ConfigBase):
                 raise ValueError("Hook_name: ", hook_name, "Not found. Ignoring hook.")
             if hook_name in ["smaps_harness", "vmstat_harness"]:
                 hooks.append(hook_type(hugepage_harness=hugepage_harness))
+            elif hook_name == "proc_maps" and benchmark is not None:
+                process_name = getattr(
+                    benchmark,
+                    "redis_server_name",
+                    lambda: benchmark.name(),
+                )()
+                hooks.append(hook_type(process_name=process_name))
             else:
                 hooks.append(hook_type())
         return hooks

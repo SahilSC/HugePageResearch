@@ -19,6 +19,7 @@ from data_collection.bpf_instrumentation.perf import (
     CustomHWConfigManager,
     PerfBPFHook,
 )
+from data_collection.bpf_instrumentation.proc_maps_hook import ProcMapsHook
 from data_collection.bpf_instrumentation.process_metadata_hook import (
     ProcessMetadataHook,
 )
@@ -44,6 +45,7 @@ all_hooks: Final[Mapping[str, type[BPFProgram]]] = {
     ZswapRuntimeBPFHook.name(): ZswapRuntimeBPFHook,
     SmapsHarnessHook.name(): SmapsHarnessHook,
     VMStatHarnessHook.name(): VMStatHarnessHook,
+    ProcMapsHook.name(): ProcMapsHook,
 }
 
 

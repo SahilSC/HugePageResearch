@@ -250,6 +250,9 @@ make install-ycsb
 make setup-redis
 ```
 
+### Step 5: Disable ASLR
+
+sudo sysctl -w kernel.randomize_va_space=0
 ---
 
 ## Running a Memory Bloat Measurement (Redis Example)

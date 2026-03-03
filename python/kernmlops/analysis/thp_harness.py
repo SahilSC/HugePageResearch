@@ -4,7 +4,6 @@ import bisect
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import matplotlib.pyplot as plt
 import polars as pl
@@ -68,9 +67,7 @@ def _build_counter_index(
         cpu = int(cpu_key[0])
         sorted_group = group.sort("ts_ns")
         ts_by_cpu[cpu] = sorted_group["ts_ns"].cast(pl.Int64).to_list()
-        cumulative_by_cpu[cpu] = (
-            sorted_group[cumulative_col].cast(pl.Float64).to_list()
-        )
+        cumulative_by_cpu[cpu] = sorted_group[cumulative_col].cast(pl.Float64).to_list()
     return CounterIndex(ts_by_cpu=ts_by_cpu, cumulative_by_cpu=cumulative_by_cpu)
 
 
@@ -110,7 +107,10 @@ def _save_empty_graph(
 
 
 def _augment_candidates_with_scan(
-    collection_id: str, candidates: pl.DataFrame, scans: pl.DataFrame, collapses: pl.DataFrame
+    collection_id: str,
+    candidates: pl.DataFrame,
+    scans: pl.DataFrame,
+    collapses: pl.DataFrame,
 ) -> pl.DataFrame:
     scan_rows = []
     if not scans.is_empty():
@@ -123,7 +123,9 @@ def _augment_candidates_with_scan(
             ts_ns = int(row["ts_ns"])
             mm = str(row.get("mm", ""))
             collapse_ts = collapse_by_mm.get(mm)
-            age_sec = float((ts_ns - collapse_ts) / 1e9) if collapse_ts is not None else 0.0
+            age_sec = (
+                float((ts_ns - collapse_ts) / 1e9) if collapse_ts is not None else 0.0
+            )
             age_censored = collapse_ts is None
             start_addr = int(row["pfn"]) << 21
             end_addr = start_addr + (2 * 1024 * 1024)
@@ -331,8 +333,10 @@ def _match_interventions(
             dist = math.sqrt(
                 (float(row["miss_rate_pre"]) - float(treated["miss_rate_pre"])) ** 2
                 + (float(row["walk_rate_pre"]) - float(treated["walk_rate_pre"])) ** 2
-                + (float(row["delta_miss_rate"]) - float(treated["delta_miss_rate"])) ** 2
-                + (float(row["delta_walk_rate"]) - float(treated["delta_walk_rate"])) ** 2
+                + (float(row["delta_miss_rate"]) - float(treated["delta_miss_rate"]))
+                ** 2
+                + (float(row["delta_walk_rate"]) - float(treated["delta_walk_rate"]))
+                ** 2
             )
             candidates.append((dist, row))
         if not candidates:
@@ -340,8 +344,12 @@ def _match_interventions(
         candidates.sort(key=lambda x: x[0])
         best_dist, control = candidates[0]
         control_id = str(control["decision_id"])
-        treated_delta = float(treated["delta_miss_rate"]) + float(treated["delta_walk_rate"])
-        control_delta = float(control["delta_miss_rate"]) + float(control["delta_walk_rate"])
+        treated_delta = float(treated["delta_miss_rate"]) + float(
+            treated["delta_walk_rate"]
+        )
+        control_delta = float(control["delta_miss_rate"]) + float(
+            control["delta_walk_rate"]
+        )
         split_preferred = treated_delta < control_delta
         matched_rows.append(
             {
@@ -385,9 +393,15 @@ def _graph_candidate_rate(graphs_dir: Path, candidates: pl.DataFrame) -> None:
         )
         return
     base_ts = int(candidates["ts_ns"].min())
-    grouped = candidates.with_columns(
-        (((pl.col("ts_ns") - base_ts) / 1_000_000_000).floor().cast(pl.Int64())).alias("sec")
-    ).group_by(["sec", "candidate_type"]).len()
+    grouped = (
+        candidates.with_columns(
+            (
+                ((pl.col("ts_ns") - base_ts) / 1_000_000_000).floor().cast(pl.Int64())
+            ).alias("sec")
+        )
+        .group_by(["sec", "candidate_type"])
+        .len()
+    )
     plt.figure(figsize=(12, 6))
     for candidate_type in sorted(grouped["candidate_type"].unique().to_list()):
         subset = grouped.filter(pl.col("candidate_type") == candidate_type).sort("sec")
@@ -478,16 +492,36 @@ def _graph_compaction_pressure(
     plt.figure(figsize=(12, 6))
     if not compaction.is_empty():
         base_ts = int(compaction["ts_ns"].min())
-        cdf = compaction.with_columns(
-            (((pl.col("ts_ns") - base_ts) / 1_000_000_000).floor().cast(pl.Int64())).alias("sec")
-        ).group_by("sec").len().sort("sec")
+        cdf = (
+            compaction.with_columns(
+                (
+                    ((pl.col("ts_ns") - base_ts) / 1_000_000_000)
+                    .floor()
+                    .cast(pl.Int64())
+                ).alias("sec")
+            )
+            .group_by("sec")
+            .len()
+            .sort("sec")
+        )
         plt.plot(cdf["sec"].to_list(), cdf["len"].to_list(), label="compaction_events")
     if not migrate.is_empty():
         base_ts = int(migrate["ts_ns"].min())
-        mdf = migrate.with_columns(
-            (((pl.col("ts_ns") - base_ts) / 1_000_000_000).floor().cast(pl.Int64())).alias("sec")
-        ).group_by("sec").agg(pl.col("thp_split").sum().alias("thp_split")).sort("sec")
-        plt.plot(mdf["sec"].to_list(), mdf["thp_split"].to_list(), label="migrate_thp_split")
+        mdf = (
+            migrate.with_columns(
+                (
+                    ((pl.col("ts_ns") - base_ts) / 1_000_000_000)
+                    .floor()
+                    .cast(pl.Int64())
+                ).alias("sec")
+            )
+            .group_by("sec")
+            .agg(pl.col("thp_split").sum().alias("thp_split"))
+            .sort("sec")
+        )
+        plt.plot(
+            mdf["sec"].to_list(), mdf["thp_split"].to_list(), label="migrate_thp_split"
+        )
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Count")
     plt.title("Compaction Pressure vs Time")
@@ -499,7 +533,10 @@ def _graph_compaction_pressure(
 
 
 def _graph_intervention_timeline(
-    graphs_dir: Path, interventions: pl.DataFrame, matches: pl.DataFrame, decisions: pl.DataFrame
+    graphs_dir: Path,
+    interventions: pl.DataFrame,
+    matches: pl.DataFrame,
+    decisions: pl.DataFrame,
 ) -> None:
     if interventions.is_empty():
         _save_empty_graph(
@@ -510,13 +547,12 @@ def _graph_intervention_timeline(
             message="No intervention rows available.",
         )
         return
-    decision_ts = dict(
-        decisions.select(["decision_id", "ts_ns"]).iter_rows()
-    )
+    decision_ts = dict(decisions.select(["decision_id", "ts_ns"]).iter_rows())
     base_ts = int(interventions["ts_ns"].min())
     plt.figure(figsize=(12, 6))
     treated_x = [
-        (int(row["ts_ns"]) - base_ts) / 1e9 for row in interventions.iter_rows(named=True)
+        (int(row["ts_ns"]) - base_ts) / 1e9
+        for row in interventions.iter_rows(named=True)
     ]
     plt.scatter(treated_x, [1.0] * len(treated_x), label="intervened", alpha=0.8)
     if not matches.is_empty():
@@ -526,7 +562,9 @@ def _graph_intervention_timeline(
             if control_ts is not None:
                 control_x.append((int(control_ts) - base_ts) / 1e9)
         if control_x:
-            plt.scatter(control_x, [0.0] * len(control_x), label="matched_control", alpha=0.8)
+            plt.scatter(
+                control_x, [0.0] * len(control_x), label="matched_control", alpha=0.8
+            )
     plt.yticks([0, 1], ["control", "intervened"])
     plt.xlabel("Runtime (sec)")
     plt.ylabel("Event")
@@ -538,7 +576,9 @@ def _graph_intervention_timeline(
     plt.close()
 
 
-def _graph_split_uplift(graphs_dir: Path, matches: pl.DataFrame, decisions: pl.DataFrame) -> None:
+def _graph_split_uplift(
+    graphs_dir: Path, matches: pl.DataFrame, decisions: pl.DataFrame
+) -> None:
     if matches.is_empty():
         _save_empty_graph(
             graphs_dir / "split_uplift_vs_control.png",
@@ -558,8 +598,12 @@ def _graph_split_uplift(graphs_dir: Path, matches: pl.DataFrame, decisions: pl.D
         control = decision_map.get(str(row["decision_id_control"]))
         if not treated or not control:
             continue
-        treated_delta = float(treated["delta_miss_rate"]) + float(treated["delta_walk_rate"])
-        control_delta = float(control["delta_miss_rate"]) + float(control["delta_walk_rate"])
+        treated_delta = float(treated["delta_miss_rate"]) + float(
+            treated["delta_walk_rate"]
+        )
+        control_delta = float(control["delta_miss_rate"]) + float(
+            control["delta_walk_rate"]
+        )
         uplift = treated_delta - control_delta
         x.append(idx)
         y.append(uplift)
@@ -692,7 +736,9 @@ def process_thp_harness_run(
     migrate = _load_table(run_dir, "thp_migrate_events")
     interventions = _load_table(run_dir, "thp_interventions")
 
-    candidates = _augment_candidates_with_scan(collection_id, candidates, scans, collapses)
+    candidates = _augment_candidates_with_scan(
+        collection_id, candidates, scans, collapses
+    )
     _write_parquet(run_dir, "thp_candidates", candidates)
     if candidates.is_empty():
         return
@@ -836,11 +882,15 @@ def generate_cross_run_graphs(base_dir: Path, *, benchmark: str = "redis") -> No
         chart_modes = sorted(runtime_df["thp_mode"].unique().to_list())
         overheads = []
         for mode in chart_modes:
-            mode_runtime = float(runtime_df.filter(pl.col("thp_mode") == mode)["runtime_s"].mean())
+            mode_runtime = float(
+                runtime_df.filter(pl.col("thp_mode") == mode)["runtime_s"].mean()
+            )
             if baseline_runtime is None or baseline_runtime <= 0:
                 overheads.append(0.0)
             else:
-                overheads.append(((mode_runtime - baseline_runtime) / baseline_runtime) * 100.0)
+                overheads.append(
+                    ((mode_runtime - baseline_runtime) / baseline_runtime) * 100.0
+                )
         plt.figure(figsize=(9, 5))
         plt.bar(chart_modes, overheads, color="#2A9D8F")
         plt.ylabel("Runtime Overhead vs never (%)")

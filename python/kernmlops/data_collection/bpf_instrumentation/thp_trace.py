@@ -16,7 +16,6 @@ from data_schema.thp_harness import (
     THPTLBFlushTraceTable,
 )
 
-
 COMPACTION_EVENT_NAMES = {
     1: "mm_compaction_suitable",
     2: "mm_compaction_finished",
