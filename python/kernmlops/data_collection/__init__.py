@@ -31,10 +31,21 @@ class GenericCollectorConfig(ConfigBase):
             if hook_name in ["thp_intervention", "vmstat_harness"]:
                 hooks.append(hook_type(hugepage_harness=hugepage_harness))
             elif hook_name == "vaptr" and benchmark is not None:
+                benchmark_config = getattr(benchmark, "config", None)
                 num_keys = getattr(
-                    getattr(benchmark, "config", None), "vaptr_num_keys", 10
+                    benchmark_config,
+                    "vaptr_num_keys",
+                    10,
                 )
-                hooks.append(hook_type(num_keys=num_keys))
+                redis_host = getattr(benchmark_config, "redis_host", "127.0.0.1")
+                redis_port = getattr(benchmark_config, "redis_port", 6380)
+                hooks.append(
+                    hook_type(
+                        num_keys=num_keys,
+                        redis_host=redis_host,
+                        redis_port=redis_port,
+                    )
+                )
             elif hook_name in ["proc_maps", "smaps_hook"] and benchmark is not None:
                 process_name = getattr(
                     benchmark,

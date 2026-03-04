@@ -22,18 +22,74 @@ class VAPtrHook(BPFProgram):
     def name(cls) -> str:
         return "vaptr"
 
-    def __init__(self, num_keys: int = 10):
+    def __init__(
+        self,
+        num_keys: int = 10,
+        redis_host: str = "127.0.0.1",
+        redis_port: int = 6380,
+    ):
         self.num_keys = num_keys
+        self.redis_host = redis_host
+        self.redis_port = redis_port
         self.collection_id = ""
         self.samples = list[VAPtrData]()
         self.key_names = [f"user{i:016d}" for i in range(num_keys)]
+        self.key_scan_pattern = "user*"
+        self.key_refresh_interval_ns = 2_000_000_000
+        self.last_key_refresh_ns = 0
         self.module_verified = False
 
     def load(self, collection_id: str):
         self.collection_id = collection_id
 
-    def _run_vaptr(self) -> subprocess.CompletedProcess[str] | None:
-        cmd = ["redis-cli", "VAPTR"] + self.key_names
+    def _redis_cli_base_cmd(self) -> list[str]:
+        return [
+            "redis-cli",
+            "-h",
+            self.redis_host,
+            "-p",
+            str(self.redis_port),
+        ]
+
+    def _refresh_key_names(self) -> None:
+        now_ns = time.monotonic_ns()
+        if now_ns - self.last_key_refresh_ns < self.key_refresh_interval_ns:
+            return
+
+        self.last_key_refresh_ns = now_ns
+        try:
+            result = subprocess.run(
+                [
+                    *self._redis_cli_base_cmd(),
+                    "--scan",
+                    "--pattern",
+                    self.key_scan_pattern,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return
+
+        if result.returncode != 0:
+            return
+
+        scanned_keys = [
+            line.strip() for line in result.stdout.splitlines() if line.strip()
+        ]
+        if not scanned_keys:
+            return
+
+        unique_keys = list(dict.fromkeys(scanned_keys))
+        self.key_names = unique_keys[: self.num_keys]
+
+    def _run_vaptr(self, keys: list[str]) -> subprocess.CompletedProcess[str] | None:
+        cmd = [
+            *self._redis_cli_base_cmd(),
+            "VAPTR",
+            *keys,
+        ]
         try:
             return subprocess.run(
                 cmd,
@@ -45,10 +101,12 @@ class VAPtrHook(BPFProgram):
             return None
 
     def poll(self):
-        if not self.key_names:
+        self._refresh_key_names()
+        keys = self.key_names[: self.num_keys]
+        if not keys:
             return
 
-        result = self._run_vaptr()
+        result = self._run_vaptr(keys)
         if result is None:
             return
 
@@ -61,7 +119,7 @@ class VAPtrHook(BPFProgram):
                     "vaptr: ERROR - VAPTR command not recognized by redis-server. "
                     "Is the vaptr.so module loaded? Check that config/redis.conf has "
                     "'loadmodule ./redis-module/vaptr.so' and that the benchmark's "
-                    "redis-server (not system redis) is running on port 6379.",
+                    f"redis-server (not system redis) is running on port {self.redis_port}.",
                     file=sys.stderr,
                 )
                 return

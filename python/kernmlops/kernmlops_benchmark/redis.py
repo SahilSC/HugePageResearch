@@ -23,6 +23,8 @@ class RedisConfig(ConfigBase):
     repeat: int = 1
     outer_repeat: int = 1
     tcmalloc: bool = False
+    redis_host: str = "127.0.0.1"
+    redis_port: int = 6380
     # Core operation parameters
     field_count: int = 256
     field_length: int = 16
@@ -47,12 +49,6 @@ class RedisConfig(ConfigBase):
     explicit_purge: bool = False
     load_from_rdb: bool = False
     vaptr_num_keys: int = 10
-
-
-size_redis = [
-    "redis-cli",
-    "DBSIZE",
-]
 
 
 class RedisBenchmark(Benchmark):
@@ -80,6 +76,16 @@ class RedisBenchmark(Benchmark):
         self.process: subprocess.Popen | None = None
         self.server: subprocess.Popen | None = None
 
+    def _redis_cli_cmd(self, *args: str) -> list[str]:
+        return [
+            "redis-cli",
+            "-h",
+            self.config.redis_host,
+            "-p",
+            str(self.config.redis_port),
+            *args,
+        ]
+
     def is_configured(self) -> bool:
         return self.benchmark_dir.is_dir()
 
@@ -90,7 +96,7 @@ class RedisBenchmark(Benchmark):
 
     def purge_server(self) -> None:
         # Purge Redis
-        purge_redis = subprocess.run(["redis-cli", "MEMORY", "PURGE"])
+        purge_redis = subprocess.run(self._redis_cli_cmd("MEMORY", "PURGE"))
         if purge_redis.returncode != 0:
             raise BenchmarkError("Redis Failed To Start")
 
@@ -111,15 +117,17 @@ class RedisBenchmark(Benchmark):
             "./config/redis.conf",
             "--loadmodule",
             "./redis-module/vaptr.so",
+            "--port",
+            str(self.config.redis_port),
         ]
         self.server = subprocess.Popen(start_redis)
 
         # Wait for redis
-        ping_redis = subprocess.run(["redis-cli", "ping"])
+        ping_redis = subprocess.run(self._redis_cli_cmd("ping"))
         i = 0
         while i < 10 and ping_redis.returncode != 0:
             time.sleep(1)
-            ping_redis = subprocess.run(["redis-cli", "ping"])
+            ping_redis = subprocess.run(self._redis_cli_cmd("ping"))
             i += 1
 
         if ping_redis.returncode != 0:
@@ -160,9 +168,9 @@ class RedisBenchmark(Benchmark):
                     "-P",
                     f"{self.benchmark_dir}/YCSB/workloads/workloada",
                     "-p",
-                    "redis.host=127.0.0.1",
+                    f"redis.host={self.config.redis_host}",
                     "-p",
-                    "redis.port=6379",
+                    f"redis.port={self.config.redis_port}",
                     "-p",
                     f"recordcount={self.config.record_count}",
                     "-p",
@@ -187,7 +195,7 @@ class RedisBenchmark(Benchmark):
                     if self.config.explicit_purge:
                         self.purge_server()
 
-                subprocess.run(size_redis)
+                subprocess.run(self._redis_cli_cmd("DBSIZE"))
 
                 record_count = (out_i + 1) * self.config.record_count
 
@@ -219,9 +227,9 @@ class RedisBenchmark(Benchmark):
                     "-p",
                     f"deleteproportion={self.config.delete_proportion}",
                     "-p",
-                    "redis.host=127.0.0.1",
+                    f"redis.host={self.config.redis_host}",
                     "-p",
-                    "redis.port=6379",
+                    f"redis.port={self.config.redis_port}",
                     "-p",
                     f"requestdistribution={self.config.request_distribution}",
                     "-p",
@@ -264,7 +272,7 @@ class RedisBenchmark(Benchmark):
     def end_server(self) -> None:
         if self.server is None:
             return
-        subprocess.run(size_redis)
+        subprocess.run(self._redis_cli_cmd("DBSIZE"))
         self.server.send_signal(signal.SIGINT)
         try:
             self.server.wait(10)
