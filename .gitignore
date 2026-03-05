@@ -195,3 +195,4 @@ benchmark/zswap/results/
 typescript
 logs/*
 CLAUDE.md
+/smaps_output
