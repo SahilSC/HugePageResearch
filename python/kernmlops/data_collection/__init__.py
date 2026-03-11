@@ -34,19 +34,11 @@ class GenericCollectorConfig(ConfigBase):
 
                 num_keys = getattr(
                     getattr(benchmark, "config", None), "vaptr_num_keys", 10
-
-
-
-
-
-
-
-
-
-
-
                 )
-                hooks.append(hook_type(num_keys=num_keys))
+                field_name = getattr(
+                    getattr(benchmark, "config", None), "vaptr_field_name", "field0"
+                )
+                hooks.append(hook_type(num_keys=num_keys, field_name=field_name))
             elif hook_name in ["proc_maps", "smaps_hook"] and benchmark is not None:
                 process_name = getattr(
                     benchmark,

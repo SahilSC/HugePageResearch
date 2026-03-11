@@ -267,6 +267,10 @@ def run_collect(
             print(f"{bpf_program.name()} BPF program loaded")
     if verbose:
         print("Finished loading BPF programs")
+    if any(hook.name() == "vaptr" for hook in bpf_programs):
+        ensure_vaptr_module = getattr(benchmark, "_ensure_vaptr_module", None)
+        if callable(ensure_vaptr_module):
+            ensure_vaptr_module()
 
     # Configure signal capture
     signal.signal(signal.SIGINT, signal_handler_factory(run_event))

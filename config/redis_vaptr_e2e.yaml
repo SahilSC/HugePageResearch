@@ -13,7 +13,7 @@ benchmark_config:
     min_field_length: 4096
     field_length: 2097152
     outer_repeat: 1
-    thread_count: 16
+    thread_count: 1
     record_count: 4096
     operation_count: 4096
     read_proportion: 0.05
@@ -23,19 +23,15 @@ benchmark_config:
     scan_proportion: 0.00
     delete_proportion: 0.95
     field_length_distribution: uniform
-    explicit_purge: true
-    server_sleep: 10s
+    explicit_purge: false
+    request_distribution: uniform
+    vaptr_num_keys: 10
+    vaptr_field_name: field0
 collector_config:
   generic:
     poll_rate: 0.1
     output_dir: data
     output_graphs: false
     hooks:
-      - mm_rss_stat
-      - memory_usage
-      - proc_maps
-      - process_trace
       - vaptr
-      # - madvise
-      # - perf
-      # - unmap_range
+      - process_trace

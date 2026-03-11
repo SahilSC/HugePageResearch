@@ -47,6 +47,7 @@ class RedisConfig(ConfigBase):
     explicit_purge: bool = False
     load_from_rdb: bool = False
     vaptr_num_keys: int = 10
+    vaptr_field_name: str = "field0"
 
 
 size_redis = [
@@ -93,6 +94,28 @@ class RedisBenchmark(Benchmark):
         purge_redis = subprocess.run(["redis-cli", "MEMORY", "PURGE"])
         if purge_redis.returncode != 0:
             raise BenchmarkError("Redis Failed To Start")
+
+    def _ensure_vaptr_module(self) -> Path:
+        vaptr_dir = Path("./redis-module")
+        vaptr_so = vaptr_dir / "vaptr.so"
+        if vaptr_so.exists():
+            return vaptr_so
+
+        vaptr_src = vaptr_dir / "vaptr.c"
+        if not vaptr_src.exists():
+            raise BenchmarkError("vaptr hook requested but redis-module/vaptr.c is missing")
+
+        build = subprocess.run(
+            ["make", "-C", str(vaptr_dir)],
+            capture_output=True,
+            text=True,
+        )
+        if build.returncode != 0 or not vaptr_so.exists():
+            raise BenchmarkError(
+                "Failed to build redis vaptr module:\n"
+                f"{build.stdout}\n{build.stderr}"
+            )
+        return vaptr_so
 
     def run(self) -> None:
         if self.process is not None:

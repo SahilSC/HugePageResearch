@@ -253,6 +253,8 @@ make setup-redis
 ### Step 5: Disable ASLR
 
 sudo sysctl -w kernel.randomize_va_space=0
+echo "kernel.randomize_va_space = 0" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
 ---
 
 ## Running a Memory Bloat Measurement (Redis Example)
@@ -282,8 +284,7 @@ This forces the kernel to try using huge pages (2MB) whenever possible.
 
 ```bash
 # Use a config that sets transparent_hugepages: always
-sudo -E HOME=$HOME UNAME=$USER GID=$(id -g) PATH="$PATH" \
-  .venv/bin/python python/kernmlops collect -v \
+python python/kernmlops collect -v \
   -c config/redis_always_compat.yaml \
   --benchmark redis
 ```
