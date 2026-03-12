@@ -7,11 +7,11 @@ benchmark_config:
     transparent_hugepages: madvise
     overcommit_memory: never_check
   redis:
-    repeat: 10
+    repeat: 1
     field_count: 1
     min_field_length: 4096
     field_length: 2097152
-    outer_repeat: 20
+    outer_repeat: 10
     thread_count: 16
     record_count: 4096
     operation_count: 4096
