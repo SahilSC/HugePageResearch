@@ -195,3 +195,7 @@ benchmark/zswap/results/
 typescript
 logs/*
 CLAUDE.md
+accesses.parquet
+accesses.csv.gz
+perf.data
+.pypy-venv/
