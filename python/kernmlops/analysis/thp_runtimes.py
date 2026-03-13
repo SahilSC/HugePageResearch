@@ -66,6 +66,7 @@ def plot_runtimes(runtimes: Dict[str, List[float]], log_dir: str) -> None:
     ax.set_title("Redis Benchmark Runtimes by THP Config")
     fig.tight_layout()
     fig.savefig("boxplot.png", dpi=150)
+    print("[INFO] plotted boxplot.png")
     plt.show()
 
 
@@ -75,17 +76,19 @@ def main() -> None:
     log_dir = sys.argv[1]
 
     runtimes = {}
-    for file in os.listdir(log_dir):
+    for file in filter(lambda f: f.endswith(".log"), os.listdir(log_dir)):
         runtime = load_runtimes(os.path.join(log_dir, file))
-        runtime.pop(0)  # Drop load time
+        # runtime.pop(0)  # Drop load time
+        total_runtime = [runtime[i] + runtime[i - 1] for i in range(1, len(runtime), 2)]
         config = file[: file.find(".")]
-        runtimes[config] = runtime
+        runtimes[config] = total_runtime
 
     for c, r in runtimes.items():
+        n = len(r)
         mean, median, std = numpy.mean(r), numpy.median(r), numpy.std(r)
         q1, q3 = numpy.percentile(r, 25), numpy.percentile(r, 75)
         iqr = q3 - q1
-        print(c, mean, median, std, std / mean, iqr)
+        print(c, n, mean, median, std, std / mean, iqr)
 
     plot_runtimes(runtimes, log_dir)
 
