@@ -5,6 +5,11 @@ from dataclasses import dataclass
 
 import polars as pl
 from data_collection.bpf_instrumentation.bpf_hook import BPFProgram
+from data_collection.page_access import (
+    PageAccessRequest,
+    PageAccessResult,
+    PageAccessTracker,
+)
 from data_schema import CollectionTable
 from data_schema.vaptr import VAPtrTable
 
@@ -15,6 +20,14 @@ class VAPtrData:
     key: str
     address: str
     page_addr: str
+    available: bool
+    mapped_pfn: int | None
+    tracking_pfn: int | None
+    physical_page_addr: int | None
+    tracking_physical_page_addr: int | None
+    page_idle: bool | None
+    access_bit: bool | None
+    access_bit_valid: bool
 
 
 class VAPtrHook(BPFProgram):
@@ -22,13 +35,21 @@ class VAPtrHook(BPFProgram):
     def name(cls) -> str:
         return "vaptr"
 
-    def __init__(self, num_keys: int = 10, field_name: str = "field0"):
+    def __init__(
+        self,
+        num_keys: int = 10,
+        field_name: str = "field0",
+        key_names: list[str] | None = None,
+        page_access_tracker: PageAccessTracker | None = None,
+    ):
         self.num_keys = num_keys
         self.field_name = field_name
         self.collection_id = ""
         self.samples = list[VAPtrData]()
-        self.key_names: list[str] = []
+        self.key_names = list(key_names or [])
         self.module_verified = False
+        self.redis_pid: int | None = None
+        self.page_access_tracker = page_access_tracker or PageAccessTracker()
 
     def load(self, collection_id: str):
         self.collection_id = collection_id
@@ -91,6 +112,85 @@ class VAPtrHook(BPFProgram):
         except (subprocess.TimeoutExpired, FileNotFoundError):
             return None
 
+    def _discover_redis_pid(self) -> int | None:
+        try:
+            result = subprocess.run(
+                ["redis-cli", "--raw", "INFO", "server"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return None
+
+        if result.returncode != 0:
+            return None
+
+        for line in result.stdout.splitlines():
+            if not line.startswith("process_id:"):
+                continue
+            try:
+                return int(line.split(":", 1)[1].strip())
+            except ValueError:
+                return None
+        return None
+
+    def _redis_pid_alive(self, pid: int) -> bool:
+        try:
+            return self.page_access_tracker.proc_root.joinpath(str(pid)).is_dir()
+        except OSError:
+            return False
+
+    def _invalidate_redis_pid(self) -> None:
+        if self.redis_pid is None:
+            return
+        self.page_access_tracker.invalidate_pid(self.redis_pid)
+        self.redis_pid = None
+
+    def _get_redis_pid(self) -> int | None:
+        if self.redis_pid is not None:
+            if self._redis_pid_alive(self.redis_pid):
+                return self.redis_pid
+            self._invalidate_redis_pid()
+
+        self.redis_pid = self._discover_redis_pid()
+        return self.redis_pid
+
+    def _sample_page_access(
+        self,
+        page_requests: list[tuple[int, int]],
+    ) -> list[PageAccessResult | None]:
+        if not page_requests:
+            return []
+
+        redis_pid = self._get_redis_pid()
+        if redis_pid is None:
+            return [None] * len(page_requests)
+
+        requests = [
+            PageAccessRequest(pid=redis_pid, virtual_address=page_addr_int)
+            for _, page_addr_int in page_requests
+        ]
+
+        try:
+            return self.page_access_tracker.sample_many(requests)
+        except (OSError, ProcessLookupError):
+            self._invalidate_redis_pid()
+
+        redis_pid = self._get_redis_pid()
+        if redis_pid is None:
+            return [None] * len(page_requests)
+
+        requests = [
+            PageAccessRequest(pid=redis_pid, virtual_address=page_addr_int)
+            for _, page_addr_int in page_requests
+        ]
+        try:
+            return self.page_access_tracker.sample_many(requests)
+        except (OSError, ProcessLookupError):
+            self._invalidate_redis_pid()
+            return [None] * len(page_requests)
+
     def poll(self):
         if not self.key_names:
             self.key_names = self._discover_keys()
@@ -125,6 +225,8 @@ class VAPtrHook(BPFProgram):
 
         ts_uptime_us = int(time.clock_gettime_ns(time.CLOCK_BOOTTIME) / 1000)
         lines = output.splitlines()
+        raw_samples = list[tuple[str, str, str, bool, int | None]]()
+        page_requests = list[tuple[int, int]]()
 
         # redis-cli --raw output format (no numbering, flat):
         #   user0000000000000000
@@ -137,24 +239,67 @@ class VAPtrHook(BPFProgram):
         for i in range(0, len(lines) - 1, 2):
             key_name = lines[i].strip()
             addr_str = lines[i + 1].strip()
-            if not addr_str.startswith("0x"):
-                continue
-            try:
-                addr_int = int(addr_str, 16)
-            except ValueError:
-                continue
-            page_addr = f"0x{addr_int & ~0xFFF:x}"
+            available = addr_str.startswith("0x")
+            page_addr_int: int | None = None
+            if available:
+                try:
+                    addr_int = int(addr_str, 16)
+                except ValueError:
+                    available = False
+                    addr_str = "n/a"
+                    page_addr = "n/a"
+                else:
+                    page_addr_int = addr_int & ~(self.page_access_tracker.page_size - 1)
+                    page_addr = f"0x{page_addr_int:x}"
+            else:
+                addr_str = "n/a"
+                page_addr = "n/a"
+            sample_index = len(raw_samples)
+            raw_samples.append((key_name, addr_str, page_addr, available, page_addr_int))
+            if available and page_addr_int is not None:
+                page_requests.append((sample_index, page_addr_int))
+
+        access_results = self._sample_page_access(page_requests)
+        access_by_index = {
+            sample_index: access_result
+            for (sample_index, _), access_result in zip(page_requests, access_results)
+        }
+
+        for sample_index, (
+            key_name,
+            addr_str,
+            page_addr,
+            available,
+            _page_addr_int,
+        ) in enumerate(raw_samples):
+            access_result = access_by_index.get(sample_index)
             self.samples.append(
                 VAPtrData(
                     ts_uptime_us=ts_uptime_us,
                     key=key_name,
                     address=addr_str,
                     page_addr=page_addr,
+                    available=available,
+                    mapped_pfn=None if access_result is None else access_result.mapped_pfn,
+                    tracking_pfn=None
+                    if access_result is None
+                    else access_result.tracking_pfn,
+                    physical_page_addr=None
+                    if access_result is None
+                    else access_result.physical_page_addr,
+                    tracking_physical_page_addr=None
+                    if access_result is None
+                    else access_result.tracking_physical_page_addr,
+                    page_idle=None if access_result is None else access_result.page_idle,
+                    access_bit=None if access_result is None else access_result.access_bit,
+                    access_bit_valid=False
+                    if access_result is None
+                    else access_result.access_bit_valid,
                 )
             )
 
     def close(self):
-        pass
+        self.page_access_tracker.close()
 
     def data(self) -> list[CollectionTable]:
         if not self.samples:

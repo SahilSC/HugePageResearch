@@ -4,6 +4,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 from typing import cast
 
 from data_schema import GraphEngine, demote
@@ -40,6 +41,8 @@ class RedisConfig(ConfigBase):
     # Distribution and performance parameters
     field_length_distribution: str = "uniform"
     request_distribution: str = "uniform"
+    insert_order: Literal["hashed", "ordered"] = "hashed"
+    zero_padding: int = 1
     thread_count: int = 1
     target: int = 10000
     sleep: str | None = None
@@ -57,6 +60,9 @@ size_redis = [
 
 
 class RedisBenchmark(Benchmark):
+    FNV_OFFSET_BASIS_64 = 0xCBF29CE484222325
+    FNV_PRIME_64 = 1099511628211
+
     @classmethod
     def name(cls) -> str:
         return "redis"
@@ -116,6 +122,47 @@ class RedisBenchmark(Benchmark):
                 f"{build.stdout}\n{build.stderr}"
             )
         return vaptr_so
+
+    @staticmethod
+    def _to_signed_64(value: int) -> int:
+        value &= (1 << 64) - 1
+        if value & (1 << 63):
+            return value - (1 << 64)
+        return value
+
+    @classmethod
+    def _ycsb_hash_keynum(cls, keynum: int) -> int:
+        hashval = cls.FNV_OFFSET_BASIS_64
+        value = keynum & ((1 << 64) - 1)
+
+        for _ in range(8):
+            octet = value & 0xFF
+            value >>= 8
+            hashval ^= octet
+            hashval = (hashval * cls.FNV_PRIME_64) & ((1 << 64) - 1)
+
+        signed_hash = cls._to_signed_64(hashval)
+        if signed_hash == -(1 << 63):
+            return signed_hash
+        return abs(signed_hash)
+
+    def _build_ycsb_key_name(self, keynum: int) -> str:
+        if self.config.insert_order != "ordered":
+            keynum = self._ycsb_hash_keynum(keynum)
+
+        value = str(keynum)
+        fill = max(self.config.zero_padding - len(value), 0)
+        return f"user{'0' * fill}{value}"
+
+    def vaptr_key_names(self, count: int | None = None) -> list[str]:
+        if count is None:
+            count = self.config.vaptr_num_keys
+        if count <= 0:
+            return []
+
+        # Track keys from the first load batch so the hook knows the cohort before the run starts.
+        max_keys = min(count, self.config.record_count)
+        return [self._build_ycsb_key_name(keynum) for keynum in range(max_keys)]
 
     def run(self) -> None:
         if self.process is not None:
@@ -207,6 +254,10 @@ class RedisBenchmark(Benchmark):
                     "-p",
                     f"insertstart={insert_start}",
                     "-p",
+                    f"insertorder={self.config.insert_order}",
+                    "-p",
+                    f"zeropadding={self.config.zero_padding}",
+                    "-p",
                     f"fieldlengthdistribution={self.config.field_length_distribution}",
                 ]
 
@@ -257,6 +308,10 @@ class RedisBenchmark(Benchmark):
                     "redis.port=6379",
                     "-p",
                     f"requestdistribution={self.config.request_distribution}",
+                    "-p",
+                    f"insertorder={self.config.insert_order}",
+                    "-p",
+                    f"zeropadding={self.config.zero_padding}",
                     "-p",
                     f"threadcount={self.config.thread_count}",
                     "-p",

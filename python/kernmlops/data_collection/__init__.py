@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from data_collection import bpf_instrumentation as bpf
+from data_collection.page_access import PageAccessResult, PageAccessTracker
 from data_collection.system_info import machine_info
 from kernmlops_config import ConfigBase
 
@@ -38,7 +39,19 @@ class GenericCollectorConfig(ConfigBase):
                 field_name = getattr(
                     getattr(benchmark, "config", None), "vaptr_field_name", "field0"
                 )
-                hooks.append(hook_type(num_keys=num_keys, field_name=field_name))
+                key_names_fn = getattr(benchmark, "vaptr_key_names", None)
+                key_names = (
+                    key_names_fn(num_keys)
+                    if callable(key_names_fn)
+                    else None
+                )
+                hooks.append(
+                    hook_type(
+                        num_keys=num_keys,
+                        field_name=field_name,
+                        key_names=key_names,
+                    )
+                )
             elif hook_name in ["proc_maps", "smaps_hook"] and benchmark is not None:
                 process_name = getattr(
                     benchmark,
@@ -68,6 +81,8 @@ CollectorConfig = make_dataclass(
 __all__ = [
     "bpf",
     "machine_info",
+    "PageAccessResult",
+    "PageAccessTracker",
     "CollectorConfig",
     "GenericCollectorConfig",
 ]

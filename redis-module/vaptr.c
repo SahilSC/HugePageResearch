@@ -1,4 +1,5 @@
 #include "redismodule.h"
+#include "redis_internals_7_4.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -12,7 +13,6 @@ typedef struct VAPtrResult {
     const char *encoding;
     size_t encoding_len;
     RedisModuleString *field_name;
-    RedisModuleString *value;
     int is_direct;
 } VAPtrResult;
 
@@ -43,10 +43,39 @@ static const char *GetObjectEncoding(
     return RedisModule_CallReplyStringPtr(reply, encoding_len);
 }
 
-static int EncodingEquals(const VAPtrResult *result, const char *encoding) {
-    size_t encoding_len = strlen(encoding);
-    return result->encoding_len == encoding_len &&
-        memcmp(result->encoding, encoding, encoding_len) == 0;
+static int LookupHashtableFieldPointer(
+    RedisModuleKey *key,
+    RedisModuleString *field_name,
+    VAPtrResult *result
+) {
+    RedisModuleKeyInt *internal_key = (RedisModuleKeyInt *)key;
+    size_t field_len;
+    const char *field_ptr = RedisModule_StringPtrLen(field_name, &field_len);
+
+    if (
+        internal_key == NULL ||
+        internal_key->value == NULL ||
+        internal_key->value->encoding != OBJ_ENCODING_HT ||
+        field_ptr == NULL
+    ) {
+        return 0;
+    }
+
+    dict *hash_dict = (dict *)internal_key->value->ptr;
+    dictEntry *entry = dictFind(hash_dict, field_ptr);
+    if (entry == NULL) {
+        return 0;
+    }
+
+    sds value = (sds)dictGetVal(entry);
+    if (value == NULL) {
+        return 0;
+    }
+
+    result->ptr = value;
+    result->len = sdslen(value);
+    result->is_direct = 1;
+    return 1;
 }
 
 static int LookupValuePointer(
@@ -77,23 +106,7 @@ static int LookupValuePointer(
     result->redis_type = "hash";
     result->encoding = GetObjectEncoding(ctx, key_name, &result->encoding_len);
     result->field_name = field_name;
-
-    if (!EncodingEquals(result, "hashtable")) {
-        result->is_direct = 0;
-        return 0;
-    }
-
-    if (
-        RedisModule_HashGet(key, REDISMODULE_HASH_NONE, field_name, &result->value, NULL)
-            != REDISMODULE_OK ||
-        result->value == NULL
-    ) {
-        return 0;
-    }
-
-    result->ptr = RedisModule_StringPtrLen(result->value, &result->len);
-    result->is_direct = result->ptr != NULL;
-    return result->is_direct;
+    return LookupHashtableFieldPointer(key, field_name, result);
 }
 
 static int ParseFieldOption(

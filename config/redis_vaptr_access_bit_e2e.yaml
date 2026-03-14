@@ -14,17 +14,18 @@ benchmark_config:
     field_length: 2097152
     outer_repeat: 1
     thread_count: 1
-    record_count: 4096
-    operation_count: 4096
-    read_proportion: 0.05
-    update_proportion: 0.00
-    insert_proportion: 0.00
-    rmw_proportion: 0.00
-    scan_proportion: 0.00
-    delete_proportion: 0.95
+    record_count: 128
+    operation_count: 2048
+    read_proportion: 1.0
+    update_proportion: 0.0
+    insert_proportion: 0.0
+    rmw_proportion: 0.0
+    scan_proportion: 0.0
+    delete_proportion: 0.0
     field_length_distribution: uniform
     explicit_purge: false
     request_distribution: uniform
+    target: 500
     insert_order: hashed
     zero_padding: 1
     vaptr_num_keys: 10

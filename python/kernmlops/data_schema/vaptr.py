@@ -19,6 +19,14 @@ class VAPtrTable(CollectionTable):
                 "key": pl.String(),
                 "address": pl.String(),
                 "page_addr": pl.String(),
+                "available": pl.Boolean(),
+                "mapped_pfn": pl.UInt64(),
+                "tracking_pfn": pl.UInt64(),
+                "physical_page_addr": pl.UInt64(),
+                "tracking_physical_page_addr": pl.UInt64(),
+                "page_idle": pl.Boolean(),
+                "access_bit": pl.Boolean(),
+                "access_bit_valid": pl.Boolean(),
             }
         )
 
