@@ -19,6 +19,9 @@ untouched.
   `messy-dir` local research ignores
 - made BPF hook registration lazy so unit tests that only need page-access or
   VAPTR logic do not eagerly import `bcc`
+- simplified `python/kernmlops/data_collection/bpf_instrumentation/__init__.py`
+  so it reads more like the old `messy-dir` file while keeping lazy hook
+  loading
 - added `reports/README.md` as a simple index for the reports area
 - removed obvious local scratch files:
   - `.tmp_validate.py`
@@ -44,8 +47,9 @@ under test.
 The fix was to keep the same runtime behavior but defer loading:
 
 - `python/kernmlops/data_collection/__init__.py` now resolves hook names lazily
-- `python/kernmlops/data_collection/bpf_instrumentation/__init__.py` now maps
-  hook names to module paths instead of importing every hook up front
+- `python/kernmlops/data_collection/bpf_instrumentation/__init__.py` now keeps
+  the old hook order and export shape, but loads hook classes only when a
+  specific hook is requested
 - `python/kernmlops/data_schema/__init__.py` now defers perf table loading until
   the perf registry is actually requested
 
@@ -56,11 +60,18 @@ less fragile.
 
 - `python -m py_compile measure_bloat.py python/kernmlops/data_collection/__init__.py python/kernmlops/data_collection/bpf_instrumentation/__init__.py`
 - `python -m unittest testing.test_page_access testing.test_vaptr_hook`
+- `python -m py_compile testing/test_bpf_instrumentation_init.py`
+- `python -m unittest testing.test_bpf_instrumentation_init testing.test_page_access testing.test_vaptr_hook`
+- `python -c 'import data_collection; ...'` smoke check confirming the perf hook
+  stays unloaded on package import
 
 Result:
 
 - the unit tests passed after the lazy-import fix
 - the syntax check for the touched Python files passed
+- the simplified `bpf_instrumentation.__init__` kept the readable hook ordering
+  while still leaving `data_collection.bpf_instrumentation.perf.perf_hook`
+  unloaded during light import paths
 
 ## Issues Encountered
 
@@ -92,6 +103,8 @@ Pros:
 - removes obvious tracked clutter without changing the collector design
 - gets branch-added notes out of the repo root without deleting the useful ones
 - makes the page-access and VAPTR tests easier to run and reason about
+- makes `bpf_instrumentation.__init__.py` much easier to scan than the tuple
+  registry version
 - leaves inherited base-repo artifacts in place
 
 Cons:
