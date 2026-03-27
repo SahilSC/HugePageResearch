@@ -11,7 +11,7 @@ from data_collection.page_access import (
     PageAccessTracker,
     ResolvedPhysicalPage,
 )
-from data_schema import CollectionTable
+from data_schema.schema import CollectionTable
 from data_schema.vaptr import VAPtrTable
 
 

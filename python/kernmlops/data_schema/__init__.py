@@ -1,10 +1,10 @@
 """Library for maintaining, manipulating, and using schemas."""
 
 import os
+from importlib import import_module
 from pwd import getpwnam
 from typing import Callable
 
-from data_schema import perf
 from data_schema.block_io import BlockIOLatencyTable, BlockIOQueueTable, BlockIOTable
 from data_schema.file_data import FileDataTable
 from data_schema.generic_table import ProcessMetadataTable
@@ -25,7 +25,7 @@ from data_schema.schema import (
     cumulative_pma_as_pdf,
 )
 
-table_types: list[type[CollectionTable]] = [
+_BASE_TABLE_TYPES: list[type[CollectionTable]] = [
     SystemInfoTable,
     QuantaRuntimeTable,
     QuantaQueuedTable,
@@ -39,7 +39,16 @@ table_types: list[type[CollectionTable]] = [
     ProcMapsTable,
     ProcSmapsTable,
     VAPtrTable,
-] + list(perf.perf_table_types.values())
+]
+
+
+def __getattr__(name: str):
+    if name == "perf":
+        return import_module("data_schema.perf")
+    if name == "table_types":
+        perf = import_module("data_schema.perf")
+        return _BASE_TABLE_TYPES + list(perf.perf_table_types.values())
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def demote(

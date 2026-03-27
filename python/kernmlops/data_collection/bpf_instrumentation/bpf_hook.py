@@ -1,6 +1,6 @@
 """Abstract definition of a BPF program."""
 
-from data_schema import CollectionTable
+from data_schema.schema import CollectionTable
 from typing_extensions import Final, Protocol
 
 POLL_TIMEOUT_MS: Final[int] = 5

@@ -1,64 +1,122 @@
 """Module for maintaining different BPF hooks/instrumentation."""
 
-from typing import Final, Mapping
+from importlib import import_module
+from typing import Final
 
-from data_collection.bpf_instrumentation.blk_io_hook import BlockIOBPFHook
 from data_collection.bpf_instrumentation.bpf_hook import BPFProgram
-from data_collection.bpf_instrumentation.cbmm import (
-    CBMMBPFHook,
-)
-from data_collection.bpf_instrumentation.collapse_huge_page import (
-    CollapseHugePageBPFHook,
-)
-from data_collection.bpf_instrumentation.file_data_hook import FileDataBPFHook
-from data_collection.bpf_instrumentation.fork_and_exit import TraceProcessHook
-from data_collection.bpf_instrumentation.madvise import MadviseBPFHook
-from data_collection.bpf_instrumentation.memory_usage_hook import MemoryUsageHook
-from data_collection.bpf_instrumentation.mm_rss_stat import TraceRSSStatBPFHook
-from data_collection.bpf_instrumentation.perf import (
-    CustomHWConfigManager,
-    PerfBPFHook,
-)
-from data_collection.bpf_instrumentation.proc_maps_hook import ProcMapsHook
-from data_collection.bpf_instrumentation.process_metadata_hook import (
-    ProcessMetadataHook,
-)
-from data_collection.bpf_instrumentation.quanta_runtime_hook import QuantaRuntimeBPFHook
-from data_collection.bpf_instrumentation.proc_smaps_hook import ProcSmapsHook
-from data_collection.bpf_instrumentation.thp_intervention_hook import THPInterventionHook
-from data_collection.bpf_instrumentation.unmap_range import UnmapRangeBPFHook
-from data_collection.bpf_instrumentation.vaptr_hook import VAPtrHook
-from data_collection.bpf_instrumentation.vmstat_harness import VMStatHarnessHook
-from data_collection.bpf_instrumentation.zswap_runtime_hook import ZswapRuntimeBPFHook
 
-all_hooks: Final[Mapping[str, type[BPFProgram]]] = {
-    FileDataBPFHook.name(): FileDataBPFHook,
-    MemoryUsageHook.name(): MemoryUsageHook,
-    ProcessMetadataHook.name(): ProcessMetadataHook,
-    QuantaRuntimeBPFHook.name(): QuantaRuntimeBPFHook,
-    BlockIOBPFHook.name(): BlockIOBPFHook,
-    PerfBPFHook.name(): PerfBPFHook,
-    CollapseHugePageBPFHook.name(): CollapseHugePageBPFHook,
-    CBMMBPFHook.name(): CBMMBPFHook,
-    MadviseBPFHook.name(): MadviseBPFHook,
-    UnmapRangeBPFHook.name(): UnmapRangeBPFHook,
-    TraceRSSStatBPFHook.name(): TraceRSSStatBPFHook,
-    TraceProcessHook.name(): TraceProcessHook,
-    ZswapRuntimeBPFHook.name(): ZswapRuntimeBPFHook,
-    ProcSmapsHook.name(): ProcSmapsHook,
-    THPInterventionHook.name(): THPInterventionHook,
-    VMStatHarnessHook.name(): VMStatHarnessHook,
-    ProcMapsHook.name(): ProcMapsHook,
-    VAPtrHook.name(): VAPtrHook,
+_HOOK_REGISTRY: Final[dict[str, tuple[str, str]]] = {
+    "file_data": (
+        "data_collection.bpf_instrumentation.file_data_hook",
+        "FileDataBPFHook",
+    ),
+    "memory_usage": (
+        "data_collection.bpf_instrumentation.memory_usage_hook",
+        "MemoryUsageHook",
+    ),
+    "process_metadata": (
+        "data_collection.bpf_instrumentation.process_metadata_hook",
+        "ProcessMetadataHook",
+    ),
+    "quanta_runtime": (
+        "data_collection.bpf_instrumentation.quanta_runtime_hook",
+        "QuantaRuntimeBPFHook",
+    ),
+    "block_io": (
+        "data_collection.bpf_instrumentation.blk_io_hook",
+        "BlockIOBPFHook",
+    ),
+    "perf": (
+        "data_collection.bpf_instrumentation.perf.perf_hook",
+        "PerfBPFHook",
+    ),
+    "collapse_huge_pages": (
+        "data_collection.bpf_instrumentation.collapse_huge_page",
+        "CollapseHugePageBPFHook",
+    ),
+    "cbmm": (
+        "data_collection.bpf_instrumentation.cbmm",
+        "CBMMBPFHook",
+    ),
+    "madvise": (
+        "data_collection.bpf_instrumentation.madvise",
+        "MadviseBPFHook",
+    ),
+    "unmap_range": (
+        "data_collection.bpf_instrumentation.unmap_range",
+        "UnmapRangeBPFHook",
+    ),
+    "mm_rss_stat": (
+        "data_collection.bpf_instrumentation.mm_rss_stat",
+        "TraceRSSStatBPFHook",
+    ),
+    "process_trace": (
+        "data_collection.bpf_instrumentation.fork_and_exit",
+        "TraceProcessHook",
+    ),
+    "zswap_runtime": (
+        "data_collection.bpf_instrumentation.zswap_runtime_hook",
+        "ZswapRuntimeBPFHook",
+    ),
+    "smaps_hook": (
+        "data_collection.bpf_instrumentation.proc_smaps_hook",
+        "ProcSmapsHook",
+    ),
+    "thp_intervention": (
+        "data_collection.bpf_instrumentation.thp_intervention_hook",
+        "THPInterventionHook",
+    ),
+    "vmstat_harness": (
+        "data_collection.bpf_instrumentation.vmstat_harness",
+        "VMStatHarnessHook",
+    ),
+    "proc_maps": (
+        "data_collection.bpf_instrumentation.proc_maps_hook",
+        "ProcMapsHook",
+    ),
+    "vaptr": (
+        "data_collection.bpf_instrumentation.vaptr_hook",
+        "VAPtrHook",
+    ),
+}
+
+_EXPORTS: Final[dict[str, tuple[str, str]]] = {
+    "CustomHWConfigManager": (
+        "data_collection.bpf_instrumentation.perf.perf_config",
+        "CustomHWConfigManager",
+    ),
+    "QuantaRuntimeBPFHook": (
+        "data_collection.bpf_instrumentation.quanta_runtime_hook",
+        "QuantaRuntimeBPFHook",
+    ),
 }
 
 
+def _load_attr(module_path: str, attr_name: str):
+    module = import_module(module_path)
+    return getattr(module, attr_name)
+
+
+def get_hook(hook_name: str) -> type[BPFProgram] | None:
+    target = _HOOK_REGISTRY.get(hook_name)
+    if target is None:
+        return None
+    return _load_attr(*target)
+
+
 def hook_names() -> list[str]:
-    return list(all_hooks.keys())
+    return list(_HOOK_REGISTRY.keys())
+
+
+def __getattr__(name: str):
+    target = _EXPORTS.get(name)
+    if target is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return _load_attr(*target)
 
 
 __all__ = [
-    "all_hooks",
+    "get_hook",
     "hook_names",
     "BPFProgram",
     "CustomHWConfigManager",

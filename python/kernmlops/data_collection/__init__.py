@@ -2,10 +2,26 @@ from dataclasses import dataclass, field, make_dataclass
 from pathlib import Path
 from typing import Any
 
-from data_collection import bpf_instrumentation as bpf
 from data_collection.page_access import PageAccessResult, PageAccessTracker
 from data_collection.system_info import machine_info
 from kernmlops_config import ConfigBase
+
+
+def _bpf():
+    from data_collection import bpf_instrumentation as bpf
+
+    return bpf
+
+
+def _default_hook_names() -> list[str]:
+    return _bpf().hook_names()
+
+
+def __getattr__(name: str):
+    if name == "bpf":
+        return _bpf()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 @dataclass(frozen=True)
 class GenericCollectorConfig(ConfigBase):
@@ -14,7 +30,7 @@ class GenericCollectorConfig(ConfigBase):
     output_dir: str = "data"
     output_dfs: bool = False
     output_graphs: bool = False
-    hooks: list[str] = field(default_factory=bpf.hook_names)
+    hooks: list[str] = field(default_factory=_default_hook_names)
 
     def get_output_dir(self) -> Path:
         return Path(self.output_dir)
@@ -23,10 +39,11 @@ class GenericCollectorConfig(ConfigBase):
         self,
         hugepage_harness: ConfigBase | None = None,
         benchmark: Any | None = None,
-    ) -> list[bpf.BPFProgram]:
+    ) -> list[Any]:
+        bpf = _bpf()
         hooks = []
         for hook_name in self.hooks:
-            hook_type = bpf.all_hooks.get(hook_name)
+            hook_type = bpf.get_hook(hook_name)
             if hook_type is None:
                 raise ValueError("Hook_name: ", hook_name, "Not found. Ignoring hook.")
             if hook_name in ["thp_intervention", "vmstat_harness"]:
