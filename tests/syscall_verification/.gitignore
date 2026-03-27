@@ -1,0 +1,5 @@
+*.o
+split_thp_cli
+mapping_info
+self_split_verify
+cross_process_split_verify
