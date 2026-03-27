@@ -285,7 +285,7 @@ This forces the kernel to try using huge pages (2MB) whenever possible.
 ```bash
 # Use a config that sets transparent_hugepages: always
 python python/kernmlops collect -v \
-  -c config/redis_always_compat.yaml \
+  -c config/redis_vaptr_access_bit_e2e.yaml \
   --benchmark redis
 ```
 

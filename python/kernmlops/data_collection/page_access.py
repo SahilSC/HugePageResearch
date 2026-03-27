@@ -95,61 +95,82 @@ class PageAccessTracker:
     def sample(self, pid: int, virtual_address: int) -> PageAccessResult:
         return self.sample_many([PageAccessRequest(pid=pid, virtual_address=virtual_address)])[0]
 
-    def sample_many(
+    def resolve_many(
         self,
         requests: Iterable[PageAccessRequest],
+    ) -> list[ResolvedPhysicalPage]:
+        return [self._resolve_request(request) for request in requests]
+
+    def read_many(
+        self,
+        resolved_pages: Iterable[ResolvedPhysicalPage],
     ) -> list[PageAccessResult]:
-        request_list = list(requests)
-        resolved = [self._resolve_request(request) for request in request_list]
+        resolved_list = list(resolved_pages)
+        known_pfns = sorted(
+            {
+                page.tracking_pfn
+                for page in resolved_list
+                if page.tracking_pfn is not None and page.tracking_pfn in self._armed_pfns
+            }
+        )
+        idle_by_pfn = {pfn: self._read_page_idle(pfn) for pfn in known_pfns}
+        return [self._result_from_resolved(page, idle_by_pfn) for page in resolved_list]
+
+    def arm_many(
+        self,
+        resolved_pages: Iterable[ResolvedPhysicalPage],
+    ) -> None:
         tracking_pfns = sorted(
             {
                 page.tracking_pfn
-                for page in resolved
+                for page in resolved_pages
                 if page.tracking_pfn is not None
             }
         )
-        known_pfns = [pfn for pfn in tracking_pfns if pfn in self._armed_pfns]
-        idle_by_pfn = {pfn: self._read_page_idle(pfn) for pfn in known_pfns}
-
         if tracking_pfns:
             self._mark_idle_pfns(tracking_pfns)
             self._armed_pfns.update(tracking_pfns)
 
-        results = list[PageAccessResult]()
-        for page in resolved:
-            if page.tracking_pfn is None:
-                results.append(
-                    PageAccessResult(
-                        pid=page.pid,
-                        virtual_address=page.virtual_address,
-                        mapped_pfn=page.mapped_pfn,
-                        tracking_pfn=page.tracking_pfn,
-                        physical_page_addr=page.physical_page_addr,
-                        tracking_physical_page_addr=page.tracking_physical_page_addr,
-                        page_idle=None,
-                        access_bit=None,
-                        access_bit_valid=False,
-                    )
-                )
-                continue
+    def sample_many(
+        self,
+        requests: Iterable[PageAccessRequest],
+    ) -> list[PageAccessResult]:
+        resolved = self.resolve_many(requests)
+        results = self.read_many(resolved)
+        self.arm_many(resolved)
+        return results
 
-            page_idle = idle_by_pfn.get(page.tracking_pfn)
-            access_bit_valid = page.tracking_pfn in idle_by_pfn
-            results.append(
-                PageAccessResult(
-                    pid=page.pid,
-                    virtual_address=page.virtual_address,
-                    mapped_pfn=page.mapped_pfn,
-                    tracking_pfn=page.tracking_pfn,
-                    physical_page_addr=page.physical_page_addr,
-                    tracking_physical_page_addr=page.tracking_physical_page_addr,
-                    page_idle=page_idle,
-                    access_bit=None if page_idle is None else not page_idle,
-                    access_bit_valid=access_bit_valid,
-                )
+    def _result_from_resolved(
+        self,
+        page: ResolvedPhysicalPage,
+        idle_by_pfn: dict[int, bool],
+    ) -> PageAccessResult:
+        if page.tracking_pfn is None:
+            return PageAccessResult(
+                pid=page.pid,
+                virtual_address=page.virtual_address,
+                mapped_pfn=page.mapped_pfn,
+                tracking_pfn=page.tracking_pfn,
+                physical_page_addr=page.physical_page_addr,
+                tracking_physical_page_addr=page.tracking_physical_page_addr,
+                page_idle=None,
+                access_bit=None,
+                access_bit_valid=False,
             )
 
-        return results
+        page_idle = idle_by_pfn.get(page.tracking_pfn)
+        access_bit_valid = page.tracking_pfn in idle_by_pfn
+        return PageAccessResult(
+            pid=page.pid,
+            virtual_address=page.virtual_address,
+            mapped_pfn=page.mapped_pfn,
+            tracking_pfn=page.tracking_pfn,
+            physical_page_addr=page.physical_page_addr,
+            tracking_physical_page_addr=page.tracking_physical_page_addr,
+            page_idle=page_idle,
+            access_bit=None if page_idle is None else not page_idle,
+            access_bit_valid=access_bit_valid,
+        )
 
     def _resolve_request(self, request: PageAccessRequest) -> ResolvedPhysicalPage:
         mapped_pfn = self._read_mapped_pfn(request.pid, request.virtual_address)

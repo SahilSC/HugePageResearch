@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Seek to verify any claims with 100% accuracy via factual evidence. Search online if you have to. If you present a fact or statement or fix or suggestion, you should implement and verify it works before telling me.
+
 ## Project Overview
 
 KernMLOps is a kernel performance data collection and analysis framework. It uses eBPF (via BCC) to instrument the Linux kernel, collects hardware/software performance counters and kernel events, writes data as Parquet files, and provides tooling for analysis and visualization. Current research focus is on Transparent Huge Pages (THP).

@@ -4,16 +4,10 @@ from data_schema.perf.perf_schema import (
     CustomHWEventID,
     PerfCollectionTable,
 )
-from data_schema.perf.perf_schema import (
-    CustomHWEventID,
-    PerfCollectionTable,
-)
 from data_schema.perf.tlb_perf import (
     DTLBPerfTable,
     DTLBLoadsPerfTable,
     DTLBWalkDurationPerfTable,
-    ITLBPerfTable,
-    ITLBLoadsPerfTable,
     ITLBWalkDurationPerfTable,
     TLBFlushPerfTable,
 )

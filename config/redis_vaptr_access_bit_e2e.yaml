@@ -4,7 +4,7 @@ benchmark_config:
     benchmark: redis
     cpus: 0
     skip_clear_page_cache: false
-    transparent_hugepages: always
+    transparent_hugepages: never
     overcommit_memory: never_check
     khugepaged_scan_sleep_millis: 8640000
   redis:

@@ -9,6 +9,7 @@ from data_collection.page_access import (
     PageAccessRequest,
     PageAccessResult,
     PageAccessTracker,
+    ResolvedPhysicalPage,
 )
 from data_schema import CollectionTable
 from data_schema.vaptr import VAPtrTable
@@ -28,6 +29,15 @@ class VAPtrData:
     page_idle: bool | None
     access_bit: bool | None
     access_bit_valid: bool
+
+
+@dataclass(frozen=True)
+class PendingVAPtrSample:
+    key: str
+    address: str
+    page_addr: str
+    available: bool
+    resolved_page: ResolvedPhysicalPage | None
 
 
 class VAPtrHook(BPFProgram):
@@ -50,6 +60,7 @@ class VAPtrHook(BPFProgram):
         self.module_verified = False
         self.redis_pid: int | None = None
         self.page_access_tracker = page_access_tracker or PageAccessTracker()
+        self.pending_samples = list[PendingVAPtrSample]()
 
     def load(self, collection_id: str):
         self.collection_id = collection_id
@@ -156,10 +167,10 @@ class VAPtrHook(BPFProgram):
         self.redis_pid = self._discover_redis_pid()
         return self.redis_pid
 
-    def _sample_page_access(
+    def _resolve_page_access(
         self,
         page_requests: list[tuple[int, int]],
-    ) -> list[PageAccessResult | None]:
+    ) -> list[ResolvedPhysicalPage | None]:
         if not page_requests:
             return []
 
@@ -173,7 +184,7 @@ class VAPtrHook(BPFProgram):
         ]
 
         try:
-            return self.page_access_tracker.sample_many(requests)
+            return self.page_access_tracker.resolve_many(requests)
         except (OSError, ProcessLookupError):
             self._invalidate_redis_pid()
 
@@ -186,47 +197,75 @@ class VAPtrHook(BPFProgram):
             for _, page_addr_int in page_requests
         ]
         try:
-            return self.page_access_tracker.sample_many(requests)
+            return self.page_access_tracker.resolve_many(requests)
         except (OSError, ProcessLookupError):
             self._invalidate_redis_pid()
             return [None] * len(page_requests)
 
-    def poll(self):
-        if not self.key_names:
-            self.key_names = self._discover_keys()
-        if not self.key_names:
+    def _append_sample_row(
+        self,
+        *,
+        ts_uptime_us: int,
+        key_name: str,
+        addr_str: str,
+        page_addr: str,
+        available: bool,
+        access_result: PageAccessResult | None,
+    ) -> None:
+        self.samples.append(
+            VAPtrData(
+                ts_uptime_us=ts_uptime_us,
+                key=key_name,
+                address=addr_str,
+                page_addr=page_addr,
+                available=available,
+                mapped_pfn=None if access_result is None else access_result.mapped_pfn,
+                tracking_pfn=None if access_result is None else access_result.tracking_pfn,
+                physical_page_addr=None
+                if access_result is None
+                else access_result.physical_page_addr,
+                tracking_physical_page_addr=None
+                if access_result is None
+                else access_result.tracking_physical_page_addr,
+                page_idle=None if access_result is None else access_result.page_idle,
+                access_bit=None if access_result is None else access_result.access_bit,
+                access_bit_valid=False
+                if access_result is None
+                else access_result.access_bit_valid,
+            )
+        )
+
+    def _record_pending_samples(self, ts_uptime_us: int) -> None:
+        if not self.pending_samples:
             return
 
-        result = self._run_vaptr()
-        if result is None:
-            return
+        resolved_pages = [
+            pending_sample.resolved_page
+            for pending_sample in self.pending_samples
+            if pending_sample.resolved_page is not None
+        ]
+        access_results = iter(self.page_access_tracker.read_many(resolved_pages))
+        for pending_sample in self.pending_samples:
+            access_result = (
+                next(access_results)
+                if pending_sample.resolved_page is not None
+                else None
+            )
+            self._append_sample_row(
+                ts_uptime_us=ts_uptime_us,
+                key_name=pending_sample.key,
+                addr_str=pending_sample.address,
+                page_addr=pending_sample.page_addr,
+                available=pending_sample.available,
+                access_result=access_result,
+            )
 
-        output = result.stdout.strip()
-
-        # Check if module is loaded on first successful connection
-        if not self.module_verified:
-            if "ERR unknown command" in output or "ERR unknown command" in result.stderr:
-                print(
-                    "vaptr: ERROR - VAPTR command not recognized by redis-server. "
-                    "Is the vaptr.so module loaded? The redis benchmark now auto-builds "
-                    "and loads ./redis-module/vaptr.so; verify that benchmark-managed "
-                    "redis-server (not system redis) is the one running on port 6379.",
-                    file=sys.stderr,
-                )
-                return
-            if output:
-                self.module_verified = True
-
-        if result.returncode != 0:
-            return
-
-        if not output:
-            return
-
-        ts_uptime_us = int(time.clock_gettime_ns(time.CLOCK_BOOTTIME) / 1000)
+    def _parse_vaptr_output(
+        self,
+        output: str,
+    ) -> list[tuple[str, str, str, bool, int | None]]:
         lines = output.splitlines()
         raw_samples = list[tuple[str, str, str, bool, int | None]]()
-        page_requests = list[tuple[int, int]]()
 
         # redis-cli --raw output format (no numbering, flat):
         #   user0000000000000000
@@ -254,17 +293,25 @@ class VAPtrHook(BPFProgram):
             else:
                 addr_str = "n/a"
                 page_addr = "n/a"
-            sample_index = len(raw_samples)
             raw_samples.append((key_name, addr_str, page_addr, available, page_addr_int))
+        return raw_samples
+
+    def _prepare_pending_samples(
+        self,
+        raw_samples: list[tuple[str, str, str, bool, int | None]],
+    ) -> list[PendingVAPtrSample]:
+        page_requests = list[tuple[int, int]]()
+        for sample_index, (_, _, _, available, page_addr_int) in enumerate(raw_samples):
             if available and page_addr_int is not None:
                 page_requests.append((sample_index, page_addr_int))
 
-        access_results = self._sample_page_access(page_requests)
-        access_by_index = {
-            sample_index: access_result
-            for (sample_index, _), access_result in zip(page_requests, access_results)
+        resolved_pages = self._resolve_page_access(page_requests)
+        resolved_by_index = {
+            sample_index: resolved_page
+            for (sample_index, _), resolved_page in zip(page_requests, resolved_pages)
         }
 
+        pending_samples = list[PendingVAPtrSample]()
         for sample_index, (
             key_name,
             addr_str,
@@ -272,31 +319,77 @@ class VAPtrHook(BPFProgram):
             available,
             _page_addr_int,
         ) in enumerate(raw_samples):
-            access_result = access_by_index.get(sample_index)
-            self.samples.append(
-                VAPtrData(
-                    ts_uptime_us=ts_uptime_us,
+            pending_samples.append(
+                PendingVAPtrSample(
                     key=key_name,
                     address=addr_str,
                     page_addr=page_addr,
                     available=available,
-                    mapped_pfn=None if access_result is None else access_result.mapped_pfn,
-                    tracking_pfn=None
-                    if access_result is None
-                    else access_result.tracking_pfn,
-                    physical_page_addr=None
-                    if access_result is None
-                    else access_result.physical_page_addr,
-                    tracking_physical_page_addr=None
-                    if access_result is None
-                    else access_result.tracking_physical_page_addr,
-                    page_idle=None if access_result is None else access_result.page_idle,
-                    access_bit=None if access_result is None else access_result.access_bit,
-                    access_bit_valid=False
-                    if access_result is None
-                    else access_result.access_bit_valid,
+                    resolved_page=resolved_by_index.get(sample_index),
                 )
             )
+        return pending_samples
+
+    def _arm_pending_samples(self, pending_samples: list[PendingVAPtrSample]) -> None:
+        resolved_pages = [
+            pending_sample.resolved_page
+            for pending_sample in pending_samples
+            if pending_sample.resolved_page is not None
+        ]
+        self.page_access_tracker.arm_many(resolved_pages)
+
+    def poll(self):
+        if not self.key_names:
+            self.key_names = self._discover_keys()
+        if not self.key_names:
+            return
+
+        ts_uptime_us = int(time.clock_gettime_ns(time.CLOCK_BOOTTIME) / 1000)
+        had_pending_samples = bool(self.pending_samples)
+        self._record_pending_samples(ts_uptime_us)
+        self.pending_samples.clear()
+
+        result = self._run_vaptr()
+        if result is None:
+            return
+
+        output = result.stdout.strip()
+
+        # Check if module is loaded on first successful connection
+        if not self.module_verified:
+            if "ERR unknown command" in output or "ERR unknown command" in result.stderr:
+                print(
+                    "vaptr: ERROR - VAPTR command not recognized by redis-server. "
+                    "Is the vaptr.so module loaded? The redis benchmark now auto-builds "
+                    "and loads ./redis-module/vaptr.so; verify that benchmark-managed "
+                    "redis-server (not system redis) is the one running on port 6379.",
+                    file=sys.stderr,
+                )
+                return
+            if output:
+                self.module_verified = True
+
+        if result.returncode != 0:
+            return
+
+        if not output:
+            return
+
+        raw_samples = self._parse_vaptr_output(output)
+        pending_samples = self._prepare_pending_samples(raw_samples)
+        self._arm_pending_samples(pending_samples)
+        self.pending_samples = pending_samples
+
+        if not had_pending_samples:
+            for pending_sample in pending_samples:
+                self._append_sample_row(
+                    ts_uptime_us=ts_uptime_us,
+                    key_name=pending_sample.key,
+                    addr_str=pending_sample.address,
+                    page_addr=pending_sample.page_addr,
+                    available=pending_sample.available,
+                    access_result=None,
+                )
 
     def close(self):
         self.page_access_tracker.close()

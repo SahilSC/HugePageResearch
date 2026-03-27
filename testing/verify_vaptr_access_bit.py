@@ -36,19 +36,27 @@ def latest_run_dir(run_root: Path, prefix: str) -> Path:
     return candidates[-1]
 
 
+def load_process_trace(run_dir: Path) -> pl.DataFrame:
+    process_trace_files = sorted(run_dir.glob("process_trace.*.parquet"))
+    if not process_trace_files:
+        raise FileNotFoundError(f"missing process_trace parquet in {run_dir}")
+
+    return pl.concat(
+        [pl.read_parquet(file_path) for file_path in process_trace_files],
+        how="diagonal_relaxed",
+    )
+
+
 def main() -> int:
     args = parse_args()
     run_dir = latest_run_dir(args.run_root, args.prefix)
     vaptr_path = run_dir / "vaptr.end.parquet"
-    process_trace_path = run_dir / "process_trace.end.parquet"
 
     if not vaptr_path.is_file():
         raise FileNotFoundError(f"missing {vaptr_path}")
-    if not process_trace_path.is_file():
-        raise FileNotFoundError(f"missing {process_trace_path}")
 
     vaptr_df = pl.read_parquet(vaptr_path)
-    process_trace_df = pl.read_parquet(process_trace_path)
+    process_trace_df = load_process_trace(run_dir)
 
     required_columns = {
         "key",
