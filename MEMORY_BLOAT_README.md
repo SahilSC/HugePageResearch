@@ -116,14 +116,36 @@ The system works by:
 cd /users/SahilSC/HugePageResearch
 ```
 
-2. Reconfirm the host kernel and installed build deps.
+2. Reconfirm that the machine is now running the custom kernel.
 
 ```bash
 uname -r
-dpkg -s flex bison dwarves libssl-dev libelf-dev >/dev/null && echo "build deps installed"
+ls -l /boot/vmlinuz /boot/initrd.img /lib/modules/6.8.12-splitthp
 ```
 
-3. If the Ubuntu source tree is missing, recreate it.
+3. Rerun the syscall verifiers on the live patched kernel.
+
+```bash
+cd /users/SahilSC/HugePageResearch/tests/syscall_verification
+./self_split_verify
+./cross_process_split_verify
+```
+
+4. If a later reboot lands on the stock kernel, do a one-shot GRUB reboot back into the custom entry.
+
+```bash
+sudo grub-reboot "Advanced options for Ubuntu>Ubuntu, with Linux 6.8.12-splitthp"
+sudo reboot
+```
+
+5. If you want to boot the stock Ubuntu kernel for comparison, do a one-shot GRUB reboot into it.
+
+```bash
+sudo grub-reboot "Advanced options for Ubuntu>Ubuntu, with Linux 6.8.0-101-generic"
+sudo reboot
+```
+
+6. If you need to rebuild the custom kernel later and the Ubuntu source tree is missing, recreate it.
 
 ```bash
 cd /users/SahilSC/HugePageResearch
@@ -138,38 +160,6 @@ cp /boot/config-6.8.0-101-generic .config
 scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
 scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
 make olddefconfig
-```
-
-4. Reconfirm the syscall patch and compile-check outputs.
-
-```bash
-cd /users/SahilSC/HugePageResearch/external/linux/ubuntu-6.8.0-101.101
-grep -E '^(CONFIG_SYSTEM_TRUSTED_KEYS|CONFIG_SYSTEM_REVOCATION_KEYS)=' .config
-rg -n "split_thp" arch/x86/entry/syscalls/syscall_64.tbl include/linux/syscalls.h mm/huge_memory.c
-ls -l arch/x86/entry/syscall_64.o mm/huge_memory.o
-rg -n "__NR_split_thp|__NR_syscalls" arch/x86/include/generated/uapi/asm/unistd_64.h
-```
-
-5. Rebuild the userspace verifier tools.
-
-```bash
-cd /users/SahilSC/HugePageResearch/tests/syscall_verification
-make
-```
-
-6. After booting the patched kernel, run the verifiers.
-
-```bash
-cd /users/SahilSC/HugePageResearch/tests/syscall_verification
-./self_split_verify
-./cross_process_split_verify
-```
-
-7. If needed, rerun the broader kernel build.
-
-```bash
-cd /users/SahilSC/HugePageResearch/external/linux/ubuntu-6.8.0-101.101
-make -j"$(nproc)" bzImage
 ```
 
 ---
