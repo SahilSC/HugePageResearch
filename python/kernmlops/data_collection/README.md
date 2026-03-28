@@ -19,6 +19,12 @@ standalone helper for Linux idle-page tracking; it is adjacent to the collector
 package because it works with the same output-oriented workflow, but it is not
 part of the default `make collect` path.
 
+[`page_access.py`](./page_access.py) is a standalone helper for resolving a
+process virtual address to its backing page frame number and sampling Linux's
+idle-page bitmap for that page. It is collector-adjacent infrastructure rather
+than a default hook on `main`, which is why it lives here but is documented
+separately from the BPF-backed hook registry.
+
 ## How A Collection Run Works
 
 The CLI entrypoint lives in
@@ -62,8 +68,9 @@ This README describes the collector stack that exists on `main` today. It
 covers the generic collector, the existing BPF-backed hooks, and the current
 configuration-driven polling/output path.
 
-Redis-address tracking, page-access tracking, and VAPTR-specific collection are
-being merged separately in later batches. Those systems should get their own
+The new standalone page-access helper now also lives in this package, but the
+Redis-address tracking and VAPTR-specific collection path are still being
+merged separately in later batches. Those systems should get their own
 directory readmes when the supporting code lands so the documentation stays
 aligned with the working tree instead of describing future files that do not yet
 exist on `main`.
