@@ -22,7 +22,7 @@ from data_schema.schema import (
     cumulative_pma_as_pdf,
 )
 
-table_types: list[type[CollectionTable]] = [
+_BASE_TABLE_TYPES: list[type[CollectionTable]] = [
     SystemInfoTable,
     QuantaRuntimeTable,
     QuantaQueuedTable,
@@ -33,7 +33,11 @@ table_types: list[type[CollectionTable]] = [
     BlockIOQueueTable,
     BlockIOTable,
     CollapseHugePageDataTable,
-] + list(perf.perf_table_types.values())
+]
+
+table_types: list[type[CollectionTable]] = _BASE_TABLE_TYPES + list(
+    perf.perf_table_types.values()
+)
 
 
 def demote(

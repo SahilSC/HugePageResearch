@@ -1,7 +1,9 @@
 from dataclasses import dataclass, field, make_dataclass
 from pathlib import Path
+from typing import Any
 
 from data_collection import bpf_instrumentation as bpf
+from data_collection.page_access import PageAccessResult, PageAccessTracker
 from data_collection.system_info import machine_info
 from kernmlops_config import ConfigBase
 
@@ -18,7 +20,7 @@ class GenericCollectorConfig(ConfigBase):
     def get_output_dir(self) -> Path:
         return Path(self.output_dir)
 
-    def get_hooks(self) -> list[bpf.BPFProgram]:
+    def get_hooks(self) -> list[Any]:
         return [
             hook()
             for hook_name, hook in bpf.all_hooks.items()
@@ -43,6 +45,8 @@ CollectorConfig = make_dataclass(
 __all__ = [
     "bpf",
     "machine_info",
+    "PageAccessResult",
+    "PageAccessTracker",
     "CollectorConfig",
     "GenericCollectorConfig",
 ]

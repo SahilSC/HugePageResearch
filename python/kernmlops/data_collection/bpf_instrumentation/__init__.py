@@ -4,9 +4,7 @@ from typing import Final, Mapping
 
 from data_collection.bpf_instrumentation.blk_io_hook import BlockIOBPFHook
 from data_collection.bpf_instrumentation.bpf_hook import BPFProgram
-from data_collection.bpf_instrumentation.cbmm import (
-    CBMMBPFHook,
-)
+from data_collection.bpf_instrumentation.cbmm import CBMMBPFHook
 from data_collection.bpf_instrumentation.collapse_huge_page import (
     CollapseHugePageBPFHook,
 )
@@ -47,12 +45,17 @@ all_hooks: Final[Mapping[str, type[BPFProgram]]] = {
 }
 
 
+def get_hook(hook_name: str) -> type[BPFProgram] | None:
+    return all_hooks.get(hook_name)
+
+
 def hook_names() -> list[str]:
     return list(all_hooks.keys())
 
 
 __all__ = [
     "all_hooks",
+    "get_hook",
     "hook_names",
     "BPFProgram",
     "CustomHWConfigManager",
