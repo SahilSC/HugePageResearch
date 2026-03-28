@@ -149,7 +149,7 @@ def run_collect(
     generic_config = cast(
         data_collection.GenericCollectorConfig, getattr(collector_config, "generic")
     )
-    bpf_programs = generic_config.get_hooks()
+    bpf_programs = generic_config.get_hooks(benchmark=benchmark)
     system_info = data_collection.machine_info().to_polars()
     system_info = system_info.unnest(system_info.columns)
     collection_id = str(uuid.uuid4())
@@ -163,6 +163,11 @@ def run_collect(
     queue = Queue(maxsize=1)
     run_event = Event()
     run_event.set()
+
+    if any(hook.name() == "vaptr" for hook in bpf_programs):
+        ensure_vaptr_module = getattr(benchmark, "_ensure_vaptr_module", None)
+        if callable(ensure_vaptr_module):
+            ensure_vaptr_module()
 
     for bpf_program in bpf_programs:
         bpf_program.load(collection_id)

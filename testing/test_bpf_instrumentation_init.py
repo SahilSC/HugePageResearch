@@ -15,8 +15,9 @@ import data_collection.bpf_instrumentation as bpf
 class BPFInstrumentationInitTest(unittest.TestCase):
     def test_hook_names_keep_expected_order(self):
         self.assertEqual(bpf.hook_names()[0], "file_data")
-        self.assertEqual(bpf.hook_names()[-1], "vmstat_harness")
+        self.assertEqual(bpf.hook_names()[-1], "vaptr")
         self.assertIn("perf", bpf.hook_names())
+        self.assertIn("vmstat_harness", bpf.hook_names())
 
     def test_get_hook_returns_registered_type(self):
         hook_type = bpf.get_hook("memory_usage")

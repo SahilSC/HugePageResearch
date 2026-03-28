@@ -25,6 +25,12 @@ idle-page bitmap for that page. It is collector-adjacent infrastructure rather
 than a default hook on `main`, which is why it lives here but is documented
 separately from the BPF-backed hook registry.
 
+[`bpf_instrumentation/vaptr_hook.py`](./bpf_instrumentation/vaptr_hook.py) is
+the Redis-specific hook that uses that page-access helper. It asks the Redis
+module in [`redis-module/`](../../../redis-module) for object addresses, rounds
+those addresses down to page boundaries, and records the page-access metadata
+for those sampled keys over time.
+
 ## How A Collection Run Works
 
 The CLI entrypoint lives in
@@ -65,15 +71,9 @@ all implement the `BPFProgram` protocol described in
 ## Current Scope On `main`
 
 This README describes the collector stack that exists on `main` today. It
-covers the generic collector, the existing BPF-backed hooks, and the current
-configuration-driven polling/output path.
-
-The new standalone page-access helper now also lives in this package, but the
-Redis-address tracking and VAPTR-specific collection path are still being
-merged separately in later batches. Those systems should get their own
-directory readmes when the supporting code lands so the documentation stays
-aligned with the working tree instead of describing future files that do not yet
-exist on `main`.
+covers the generic collector, the existing BPF-backed hooks, the standalone
+page-access helper, and the Redis/VAPTR address-sampling path that builds on
+that helper.
 
 ## Useful Commands
 
@@ -93,4 +93,5 @@ From the repository root:
 After this file, the next place to read is
 [`python/kernmlops/data_collection/bpf_instrumentation/README.md`](./bpf_instrumentation/README.md).
 That file explains how individual hooks are structured and where the BPF-backed
-logic actually lives.
+logic actually lives. If you want the Redis-side half of the VAPTR path, read
+[`redis-module/README.md`](../../../redis-module/README.md) after that.

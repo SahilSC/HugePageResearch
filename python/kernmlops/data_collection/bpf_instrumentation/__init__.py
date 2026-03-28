@@ -23,6 +23,7 @@ from data_collection.bpf_instrumentation.process_metadata_hook import (
 from data_collection.bpf_instrumentation.quanta_runtime_hook import QuantaRuntimeBPFHook
 from data_collection.bpf_instrumentation.smaps_harness import SmapsHarnessHook
 from data_collection.bpf_instrumentation.unmap_range import UnmapRangeBPFHook
+from data_collection.bpf_instrumentation.vaptr_hook import VAPtrHook
 from data_collection.bpf_instrumentation.vmstat_harness import VMStatHarnessHook
 from data_collection.bpf_instrumentation.zswap_runtime_hook import ZswapRuntimeBPFHook
 
@@ -42,6 +43,7 @@ all_hooks: Final[Mapping[str, type[BPFProgram]]] = {
     ZswapRuntimeBPFHook.name(): ZswapRuntimeBPFHook,
     SmapsHarnessHook.name(): SmapsHarnessHook,
     VMStatHarnessHook.name(): VMStatHarnessHook,
+    VAPtrHook.name(): VAPtrHook,
 }
 
 

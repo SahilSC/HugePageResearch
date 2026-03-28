@@ -20,12 +20,30 @@ class GenericCollectorConfig(ConfigBase):
     def get_output_dir(self) -> Path:
         return Path(self.output_dir)
 
-    def get_hooks(self) -> list[Any]:
-        return [
-            hook()
-            for hook_name, hook in bpf.all_hooks.items()
-            if hook_name in self.hooks
-        ]
+    def get_hooks(self, benchmark: Any | None = None) -> list[Any]:
+        hooks = []
+        for hook_name, hook_type in bpf.all_hooks.items():
+            if hook_name not in self.hooks:
+                continue
+            if hook_name == "vaptr" and benchmark is not None:
+                num_keys = getattr(
+                    getattr(benchmark, "config", None), "vaptr_num_keys", 10
+                )
+                field_name = getattr(
+                    getattr(benchmark, "config", None), "vaptr_field_name", "field0"
+                )
+                key_names_fn = getattr(benchmark, "vaptr_key_names", None)
+                key_names = key_names_fn(num_keys) if callable(key_names_fn) else None
+                hooks.append(
+                    hook_type(
+                        num_keys=num_keys,
+                        field_name=field_name,
+                        key_names=key_names,
+                    )
+                )
+            else:
+                hooks.append(hook_type())
+        return hooks
 
 
 CollectorConfig = make_dataclass(
