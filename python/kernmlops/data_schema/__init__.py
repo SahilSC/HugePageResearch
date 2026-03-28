@@ -21,6 +21,7 @@ from data_schema.schema import (
     collection_id_column,
     cumulative_pma_as_pdf,
 )
+from data_schema.vaptr import VAPtrTable
 
 _BASE_TABLE_TYPES: list[type[CollectionTable]] = [
     SystemInfoTable,
@@ -33,6 +34,7 @@ _BASE_TABLE_TYPES: list[type[CollectionTable]] = [
     BlockIOQueueTable,
     BlockIOTable,
     CollapseHugePageDataTable,
+    VAPtrTable,
 ]
 
 table_types: list[type[CollectionTable]] = _BASE_TABLE_TYPES + list(
