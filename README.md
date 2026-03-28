@@ -240,6 +240,20 @@ Then `make collect` or `make collect-data` will use the overrides set.
 If an unknown configuration parameter is set (i.e. `benchmark_cfg`) and
 error will be thrown before collection begins.
 
+## Where To Read Next
+
+If you want to understand the collector internals instead of only running the
+top-level commands, start with these subsystem guides:
+
+- [`python/kernmlops/data_collection/README.md`](python/kernmlops/data_collection/README.md)
+  explains how the collector package turns configured hook names into running
+  instrumentation.
+- [`python/kernmlops/data_collection/bpf_instrumentation/README.md`](python/kernmlops/data_collection/bpf_instrumentation/README.md)
+  explains what a hook is in this repository and where the built-in BPF-backed
+  hooks live.
+- [`docs/Add-Perf-Counter.md`](docs/Add-Perf-Counter.md) walks through adding a
+  new perf counter when a machine exposes different event names.
+
 ## Troubleshooting: Or How I Learned to Shoot My Foot
 
 ### eBPF Programs
