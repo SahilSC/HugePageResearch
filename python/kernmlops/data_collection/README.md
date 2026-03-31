@@ -31,6 +31,11 @@ module in [`redis-module/`](../../../redis-module) for object addresses, rounds
 those addresses down to page boundaries, and records the page-access metadata
 for those sampled keys over time.
 
+The THP harness path also lives here now. It uses the hook registry to combine
+`thp_trace`, `vmstat_harness`, `thp_intervention`, `proc_maps`, or `smaps_hook`
+with one top-level `hugepage_harness` config block. That extra config is where
+sampling intervals, target process matching, and split timing live.
+
 ## How A Collection Run Works
 
 The CLI entrypoint lives in
@@ -68,12 +73,17 @@ names and instantiates one object for each enabled hook. The resulting objects
 all implement the `BPFProgram` protocol described in
 [`bpf_instrumentation/bpf_hook.py`](./bpf_instrumentation/bpf_hook.py).
 
+Some hooks also need extra runtime context. The THP harness hooks receive the
+top-level `hugepage_harness` settings, and the process-map hooks derive their
+target process name from the active benchmark.
+
 ## Current Scope On `main`
 
 This README describes the collector stack that exists on `main` today. It
 covers the generic collector, the existing BPF-backed hooks, the standalone
-page-access helper, and the Redis/VAPTR address-sampling path that builds on
-that helper.
+page-access helper, the Redis/VAPTR address-sampling path that builds on that
+helper, and the THP harness path that samples Redis memory maps while deciding
+when to split huge pages.
 
 ## Useful Commands
 

@@ -17,7 +17,12 @@ class BPFInstrumentationInitTest(unittest.TestCase):
         self.assertEqual(bpf.hook_names()[0], "file_data")
         self.assertEqual(bpf.hook_names()[-1], "vaptr")
         self.assertIn("perf", bpf.hook_names())
+        self.assertIn("thp_trace", bpf.hook_names())
+        self.assertIn("smaps_harness", bpf.hook_names())
         self.assertIn("vmstat_harness", bpf.hook_names())
+        self.assertIn("thp_intervention", bpf.hook_names())
+        self.assertIn("proc_maps", bpf.hook_names())
+        self.assertIn("smaps_hook", bpf.hook_names())
 
     def test_get_hook_returns_registered_type(self):
         hook_type = bpf.get_hook("memory_usage")
