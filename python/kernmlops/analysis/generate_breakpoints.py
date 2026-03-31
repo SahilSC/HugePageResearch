@@ -93,7 +93,8 @@ def set_breakpoint(
         breakpoints: Current breakpoint mapping.
         key: The Redis key to update.
         access_num: The access number at which to break. Valid range
-            is ``[0, access_counts[key]]`` inclusive.
+            is ``[0, access_counts[key] + 1]`` inclusive. A value of
+            ``access_counts[key] + 1`` means the page is never broken.
         access_counts: Per-key access counts used for validation.
 
     Returns:
@@ -101,12 +102,12 @@ def set_breakpoint(
 
     Raises:
         KeyError: If *key* is not present in *access_counts*.
-        ValueError: If *access_num* is outside ``[0, access_counts[key]]``.
+        ValueError: If *access_num* is outside ``[0, access_counts[key] + 1]``.
     """
     if key not in access_counts:
         raise KeyError(f"Key {key!r} not found in access counts")
 
-    max_access = access_counts[key]
+    max_access = access_counts[key] + 1
     if not (0 <= access_num <= max_access):
         raise ValueError(
             f"access_num must be in [0, {max_access}] for key {key!r}, got {access_num}"
@@ -126,10 +127,12 @@ def generate_combinations(
     Strategy:
 
     1. All-zeros baseline (every key at breakpoint 0).
-    2. Single-key-at-max variants (each key individually set to its
-       maximum access count; all others at 0).
-    3. Random combinations to fill remaining slots, where each key is
-       independently sampled from ``[0, access_counts[key]]``.
+    2. All-max combination (every key at ``access_counts[key] + 1`` —
+       page never broken for any key).
+    3. Single-key-at-max variants (each key individually set to its
+       maximum; all others at 0).
+    4. Random combinations to fill remaining slots, where each key is
+       independently sampled from ``[0, access_counts[key] + 1]``.
 
     Duplicate combinations are deduplicated.
 
@@ -156,20 +159,23 @@ def generate_combinations(
     # 1. All-zeros baseline.
     _add(tuple(0 for _ in keys))
 
-    # 2. Single-key-at-max variants.
+    # 2. All-max combination (every key at access_count + 1 — page never broken).
+    _add(tuple(access_counts[k] + 1 for k in keys))
+
+    # 3. Single-key-at-max variants (one key at max, others at 0).
     for i, key in enumerate(keys):
         if len(combos) >= max_combos:
             break
         values = [0] * len(keys)
-        values[i] = access_counts[key]
+        values[i] = access_counts[key] + 1
         _add(tuple(values))
 
-    # 3. Random combinations for remaining slots.
+    # 4. Random combinations for remaining slots.
     max_attempts = max_combos * 10
     for _ in range(max_attempts):
         if len(combos) >= max_combos:
             break
-        values = tuple(random.randint(0, access_counts[k]) for k in keys)
+        values = tuple(random.randint(0, access_counts[k] + 1) for k in keys)
         _add(values)
 
     return combos
