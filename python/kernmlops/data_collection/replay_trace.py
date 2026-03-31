@@ -62,6 +62,17 @@ _QUOTED_TOKEN_RE: re.Pattern[str] = re.compile(r'"((?:[^"\\]|\\.)*)"')
 BREAK_PAGE_MAX_ATTEMPTS: int = 2
 EXECUTE_MAX_ATTEMPTS: int = 2
 
+_THP_PATH = Path("/sys/kernel/mm/transparent_hugepage/enabled")
+_THP_DEFRAG_PATH = Path("/sys/kernel/mm/transparent_hugepage/defrag")
+_KHUGEPAGED_SLEEP_PATH = Path(
+    "/sys/kernel/mm/transparent_hugepage/khugepaged/scan_sleep_millisecs"
+)
+_NUMA_BALANCING_PATH = Path("/proc/sys/kernel/numa_balancing")
+_SWAPPINESS_PATH = Path("/proc/sys/vm/swappiness")
+_OVERCOMMIT_PATH = Path("/proc/sys/vm/overcommit_memory")
+_COMPACTION_PROACTIVENESS_PATH = Path("/proc/sys/vm/compaction_proactiveness")
+_KSM_PATH = Path("/sys/kernel/mm/ksm/run")
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -81,6 +92,24 @@ class RedisCommand:
     command: str
     args: list[str] = field(default_factory=list)
     key: str = ""
+
+
+@dataclass(frozen=True)
+class SystemConfig:
+    """Saved state of kernel tunables modified during benchmarking.
+
+    Optional fields are ``None`` when the corresponding sysfs/procfs
+    path does not exist on the host kernel.
+    """
+
+    thp_enabled: str
+    thp_defrag: str
+    khugepaged_scan_sleep_ms: str
+    numa_balancing: str
+    swappiness: str
+    overcommit_memory: str
+    compaction_proactiveness: str | None
+    ksm_run: str | None
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +167,93 @@ def break_page(key: str) -> bool:
     """
     # TODO add syscall and return status
     return False
+
+
+# ---------------------------------------------------------------------------
+# System configuration
+# ---------------------------------------------------------------------------
+
+
+def _sysfs_write(path: Path, value: str) -> None:
+    """Write *value* to a sysfs/procfs file via a privileged bash redirect."""
+    subprocess.check_call(
+        ["sudo", "bash", "-c", f"echo {value} > {path}"],
+        stdout=subprocess.DEVNULL,
+    )
+
+
+def setup_system() -> SystemConfig:
+    """Snapshot kernel tunables and apply benchmark-optimal settings.
+
+    Sets THP to ``always`` so all Redis allocations begin as huge pages
+    (breakpoints are then used to break them up selectively). Disables
+    background memory management that would otherwise add timing noise:
+    THP defrag, khugepaged, NUMA balancing, KSM, proactive compaction,
+    and swap. Pins overcommit_memory to ``1`` (always allow) for
+    consistent allocator behaviour.
+
+    Returns:
+        A ``SystemConfig`` holding the pre-modification values for use by
+        :func:`teardown_system`.
+    """
+    config = SystemConfig(
+        thp_enabled=_THP_PATH.read_text().strip(),
+        thp_defrag=_THP_DEFRAG_PATH.read_text().strip(),
+        khugepaged_scan_sleep_ms=_KHUGEPAGED_SLEEP_PATH.read_text().strip(),
+        numa_balancing=_NUMA_BALANCING_PATH.read_text().strip(),
+        swappiness=_SWAPPINESS_PATH.read_text().strip(),
+        overcommit_memory=_OVERCOMMIT_PATH.read_text().strip(),
+        compaction_proactiveness=(
+            _COMPACTION_PROACTIVENESS_PATH.read_text().strip()
+            if _COMPACTION_PROACTIVENESS_PATH.exists()
+            else None
+        ),
+        ksm_run=(_KSM_PATH.read_text().strip() if _KSM_PATH.exists() else None),
+    )
+
+    print("Setting up system configuration ...", file=sys.stderr)
+    _sysfs_write(_THP_PATH, "always")
+    _sysfs_write(_THP_DEFRAG_PATH, "never")
+    _sysfs_write(_KHUGEPAGED_SLEEP_PATH, "4294967295")  # max uint32 — disables scanning
+    _sysfs_write(_NUMA_BALANCING_PATH, "0")
+    _sysfs_write(_SWAPPINESS_PATH, "0")
+    _sysfs_write(_OVERCOMMIT_PATH, "1")  # always allow
+    if config.compaction_proactiveness is not None:
+        _sysfs_write(_COMPACTION_PROACTIVENESS_PATH, "0")
+    if config.ksm_run is not None:
+        _sysfs_write(_KSM_PATH, "0")
+    print("System configuration applied.", file=sys.stderr)
+
+    return config
+
+
+def teardown_system(config: SystemConfig) -> None:
+    """Restore kernel tunables to the values saved by :func:`setup_system`.
+
+    Args:
+        config: The ``SystemConfig`` returned by :func:`setup_system`.
+    """
+    print("Restoring system configuration ...", file=sys.stderr)
+
+    # The THP and defrag files store e.g. "always [madvise] never"; restore
+    # only the bracketed (active) word.
+    for path, raw in [
+        (_THP_PATH, config.thp_enabled),
+        (_THP_DEFRAG_PATH, config.thp_defrag),
+    ]:
+        match = re.search(r"\[(\w+)\]", raw)
+        _sysfs_write(path, match.group(1) if match else raw)
+
+    _sysfs_write(_KHUGEPAGED_SLEEP_PATH, config.khugepaged_scan_sleep_ms)
+    _sysfs_write(_NUMA_BALANCING_PATH, config.numa_balancing)
+    _sysfs_write(_SWAPPINESS_PATH, config.swappiness)
+    _sysfs_write(_OVERCOMMIT_PATH, config.overcommit_memory)
+    if config.compaction_proactiveness is not None:
+        _sysfs_write(_COMPACTION_PROACTIVENESS_PATH, config.compaction_proactiveness)
+    if config.ksm_run is not None:
+        _sysfs_write(_KSM_PATH, config.ksm_run)
+
+    print("System configuration restored.", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -311,15 +427,16 @@ def run_benchmark(
 ) -> None:
     """For each breakpoint combination: restore snapshot, then time the run.
 
+    Calls :func:`setup_system` once before the loop to set THP to ``always``
+    and silence background memory management noise, then restores original
+    settings unconditionally via :func:`teardown_system` in a ``finally``
+    block.
+
     Steps per combination:
 
     1. Restore the RDB snapshot — exact key-value layout from the load phase.
     2. ``MEMORY PURGE`` — reset allocator state.
     3. Time the replay of *run_trace* with this combination's breakpoints.
-
-    Results are written to *output* as a Parquet file. Each row contains
-    the breakpoint vector for that combination plus a ``runtime_s`` column
-    with the measured wall-clock duration of the run replay.
 
     Args:
         snapshot_path: Path to ``snapshot.rdb`` from ``capture_redis_trace.sh``.
@@ -334,31 +451,35 @@ def run_benchmark(
     results: list[dict] = []
     n_combos = len(breakpoints_df)
 
-    for idx, row in enumerate(breakpoints_df.iter_rows(named=True)):
-        breakpoints: dict[str, int] = dict(row)
+    sys_config = setup_system()
+    try:
+        for idx, row in enumerate(breakpoints_df.iter_rows(named=True)):
+            breakpoints: dict[str, int] = dict(row)
 
-        # 1. Restore snapshot
-        print(f"[{idx + 1}/{n_combos}] Restoring snapshot ...", file=sys.stderr)
-        restore_snapshot(client, snapshot_path)
+            # 1. Restore snapshot
+            print(f"[{idx + 1}/{n_combos}] Restoring snapshot ...", file=sys.stderr)
+            restore_snapshot(client, snapshot_path)
 
-        # 2. Post-restore memory purge
-        memory_purge(client)
+            # 2. Post-restore memory purge
+            memory_purge(client)
 
-        # 3. Timed run replay
-        print(f"[{idx + 1}/{n_combos}] Timing run trace ...", file=sys.stderr)
-        t0 = time.perf_counter()
-        total_cmds = replay(run_trace, client, breakpoints=breakpoints)
-        runtime_s = time.perf_counter() - t0
+            # 3. Timed run replay
+            print(f"[{idx + 1}/{n_combos}] Timing run trace ...", file=sys.stderr)
+            t0 = time.perf_counter()
+            total_cmds = replay(run_trace, client, breakpoints=breakpoints)
+            runtime_s = time.perf_counter() - t0
 
-        print(
-            f"[{idx + 1}/{n_combos}] Done — {total_cmds} commands in {runtime_s:.3f}s",
-            file=sys.stderr,
-        )
-        results.append({**breakpoints, "runtime_s": runtime_s})
+            print(
+                f"[{idx + 1}/{n_combos}] Done — {total_cmds} commands in {runtime_s:.3f}s",
+                file=sys.stderr,
+            )
+            results.append({**breakpoints, "runtime_s": runtime_s})
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    pl.DataFrame(results).write_parquet(output)
-    print(f"Results written to {output}", file=sys.stderr)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        pl.DataFrame(results).write_parquet(output)
+        print(f"Results written to {output}", file=sys.stderr)
+    finally:
+        teardown_system(sys_config)
 
 
 # ---------------------------------------------------------------------------
