@@ -33,6 +33,18 @@ Calculating bloat is inherently difficult:
 
 This repository provides the tools to instrument the kernel with eBPF probes, run benchmarks against programs like Redis, and collect fine-grained memory usage data to compute and analyze memory bloat.
 
+If you are starting from a fresh CloudLab or Ubuntu machine, begin with the
+root [`README.md`](./README.md) first. The root README now carries the shortest
+path for:
+
+- Docker bootstrap
+- Redis/YCSB setup
+- the Ubuntu `6.8.0-101.101` kernel source recreation path
+- booting the custom `6.8.12-splitthp` kernel
+
+This document goes deeper on the measurement workflow, config choices, and
+analysis steps after the machine is already bootstrapped.
+
 ---
 
 ## What Is Memory Bloat?
@@ -104,6 +116,11 @@ The system works by:
 > **Kernel version note**: The `madvise`, `collapse_huge_pages`, and `unmap_range` BPF hooks require
 > **kernel 6.x+** (they attach to `do_vmi_align_munmap` which doesn't exist on 5.15). On older kernels,
 > use only the `mm_rss_stat`, `process_trace`, and `perf` hooks.
+
+> **Syscall research note**: The THP-splitting syscall work in this repo uses the
+> Ubuntu `6.8.0-101.101` source tree and installs a custom kernel with release
+> string `6.8.12-splitthp`. The root [`README.md`](./README.md) contains the
+> current recreate, build, install, and reboot commands for that path.
 
 ---
 

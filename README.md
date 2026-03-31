@@ -10,6 +10,149 @@ WARNING: Do not clone submodules, this will clone the linux kernel.
 Cloning the kernel is prohibitively expensive.
 That submodule is only necessary if you plan to use in-kernel inference.
 
+## CloudLab / Production Setup
+
+If you are starting from a fresh CloudLab or Ubuntu machine and want the
+shortest path to a working Redis benchmark environment, use this flow first.
+
+### Step 1: Clone and Run the Setup Script
+
+```bash
+git clone https://github.com/SahilSC/HugePageResearch.git
+cd HugePageResearch
+source scripts/setup_prep_env.sh
+```
+
+This installs Docker and `uv`, creates `.venv`, and builds the Docker image.
+Expected time: about 10 minutes on a fresh Ubuntu machine.
+
+### Step 2: Enter the Docker Container
+
+```bash
+make docker
+```
+
+### Step 3: Install YCSB Inside the Container
+
+```bash
+make install-ycsb
+```
+
+### Step 4: Setup Redis Inside the Container
+
+```bash
+make setup-redis
+```
+
+### Step 5: Disable ASLR on the Host
+
+```bash
+sudo sysctl -w kernel.randomize_va_space=0
+echo "kernel.randomize_va_space = 0" | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+## Redis Memory-Bloat Example
+
+If you are running collection on the host, activate the repo environment first:
+
+```bash
+source .venv/bin/activate
+```
+
+Baseline run with THP disabled:
+
+```bash
+sudo -E HOME=$HOME UNAME=$USER GID=$(id -g) PATH="$PATH" \
+  .venv/bin/python python/kernmlops collect -v \
+  -c config/redis_never_compat.yaml \
+  --benchmark redis
+```
+
+Comparison run with THP forced on:
+
+```bash
+sudo -E HOME=$HOME UNAME=$USER GID=$(id -g) PATH="$PATH" \
+  .venv/bin/python python/kernmlops collect -v \
+  -c config/redis_always_compat.yaml \
+  --benchmark redis
+```
+
+Optional VAPTR / access-bit run:
+
+```bash
+sudo -E HOME=$HOME UNAME=$USER GID=$(id -g) PATH="$PATH" \
+  .venv/bin/python python/kernmlops collect -v \
+  -c config/redis_vaptr_access_bit_e2e.yaml \
+  --benchmark redis
+```
+
+## Custom Kernel Setup for `split_thp`
+
+Use the host machine for kernel work, not the Docker container. The syscall
+research in this repo targets the Ubuntu `6.8.0-101.101` source tree, and the
+custom installed kernel release string is `6.8.12-splitthp`.
+
+Install the kernel build prerequisites:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential bc cpio flex bison dwarves libssl-dev libelf-dev
+```
+
+Recreate the matching Ubuntu source tree if it is missing:
+
+```bash
+cd ~/HugePageResearch
+mkdir -p external/linux
+cd external/linux
+apt download linux-source-6.8.0=6.8.0-101.101
+dpkg-deb -x linux-source-6.8.0_6.8.0-101.101_all.deb pkg
+tar -xf pkg/usr/src/linux-source-6.8.0.tar.bz2
+mv linux-source-6.8.0 ubuntu-6.8.0-101.101
+```
+
+Prepare the kernel config:
+
+```bash
+cd ~/HugePageResearch/external/linux/ubuntu-6.8.0-101.101
+cp /boot/config-6.8.0-101-generic .config
+scripts/config --set-str LOCALVERSION "-splitthp"
+scripts/config --set-str SYSTEM_TRUSTED_KEYS ""
+scripts/config --set-str SYSTEM_REVOCATION_KEYS ""
+make olddefconfig
+grep CONFIG_LOCALVERSION .config
+```
+
+Build and install the custom kernel:
+
+```bash
+cd ~/HugePageResearch/external/linux/ubuntu-6.8.0-101.101
+make -j"$(nproc)" bzImage modules
+sudo make modules_install install
+```
+
+Reboot into the custom kernel explicitly:
+
+```bash
+sudo grub-reboot "Advanced options for Ubuntu>Ubuntu, with Linux 6.8.12-splitthp"
+sudo reboot
+```
+
+Verify after reboot:
+
+```bash
+uname -r
+ls -l /boot/vmlinuz /boot/initrd.img /lib/modules/6.8.12-splitthp
+```
+
+Boot the stock kernel again if you need a control run:
+
+```bash
+sudo grub-reboot "Advanced options for Ubuntu>Ubuntu, with Linux 6.8.0-101-generic"
+sudo reboot
+```
+
 ## Jupyter Setup -- Recommended
 
 You will need docker and uv,
