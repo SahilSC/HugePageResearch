@@ -112,7 +112,8 @@ class PageAccessTracker:
             {
                 page.tracking_pfn
                 for page in resolved_list
-                if page.tracking_pfn is not None and page.tracking_pfn in self._armed_pfns
+                if page.tracking_pfn is not None
+                and page.tracking_pfn in self._armed_pfns
             }
         )
         idle_by_pfn = {pfn: self._read_page_idle(pfn) for pfn in known_pfns}
@@ -123,7 +124,11 @@ class PageAccessTracker:
         resolved_pages: Iterable[ResolvedPhysicalPage],
     ) -> None:
         tracking_pfns = sorted(
-            {page.tracking_pfn for page in resolved_pages if page.tracking_pfn is not None}
+            {
+                page.tracking_pfn
+                for page in resolved_pages
+                if page.tracking_pfn is not None
+            }
         )
         if tracking_pfns:
             self._mark_idle_pfns(tracking_pfns)

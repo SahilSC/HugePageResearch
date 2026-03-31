@@ -10,8 +10,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python" / "kernmlops"))
 
-from data_collection.page_access import PageAccessResult, ResolvedPhysicalPage
 from data_collection.bpf_instrumentation.vaptr_hook import VAPtrHook
+from data_collection.page_access import PageAccessResult, ResolvedPhysicalPage
 
 
 class VAPtrPidCacheTest(unittest.TestCase):
@@ -20,7 +20,9 @@ class VAPtrPidCacheTest(unittest.TestCase):
         hook = VAPtrHook(page_access_tracker=page_access_tracker)
 
         with (
-            mock.patch.object(hook, "_discover_redis_pid", return_value=321) as discover,
+            mock.patch.object(
+                hook, "_discover_redis_pid", return_value=321
+            ) as discover,
             mock.patch.object(hook, "_redis_pid_alive", return_value=True) as alive,
         ):
             self.assertEqual(hook._get_redis_pid(), 321)
@@ -37,7 +39,9 @@ class VAPtrPidCacheTest(unittest.TestCase):
 
         with (
             mock.patch.object(hook, "_redis_pid_alive", return_value=False) as alive,
-            mock.patch.object(hook, "_discover_redis_pid", return_value=222) as discover,
+            mock.patch.object(
+                hook, "_discover_redis_pid", return_value=222
+            ) as discover,
         ):
             self.assertEqual(hook._get_redis_pid(), 222)
 
@@ -107,13 +111,16 @@ class VAPtrSamplingOrderTest(unittest.TestCase):
                 hook.poll()
                 hook.poll()
 
-        self.assertEqual(page_access_tracker.mock_calls, [
-            mock.call.resolve_many([mock.ANY]),
-            mock.call.arm_many([first_resolved]),
-            mock.call.read_many([first_resolved]),
-            mock.call.resolve_many([mock.ANY]),
-            mock.call.arm_many([second_resolved]),
-        ])
+        self.assertEqual(
+            page_access_tracker.mock_calls,
+            [
+                mock.call.resolve_many([mock.ANY]),
+                mock.call.arm_many([first_resolved]),
+                mock.call.read_many([first_resolved]),
+                mock.call.resolve_many([mock.ANY]),
+                mock.call.arm_many([second_resolved]),
+            ],
+        )
         self.assertEqual(len(hook.samples), 2)
         self.assertEqual(hook.samples[0].address, "0x1000")
         self.assertFalse(hook.samples[0].access_bit_valid)

@@ -26,7 +26,9 @@ class BPFInstrumentationInitTest(unittest.TestCase):
 
     def test_importing_data_collection_exposes_registry_and_helpers(self):
         self.assertIs(data_collection.bpf, bpf)
-        self.assertEqual(data_collection.PageAccessTracker.__name__, "PageAccessTracker")
+        self.assertEqual(
+            data_collection.PageAccessTracker.__name__, "PageAccessTracker"
+        )
 
 
 if __name__ == "__main__":
