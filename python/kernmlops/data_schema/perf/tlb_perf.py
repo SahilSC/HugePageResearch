@@ -301,3 +301,168 @@ class DTLBWalkDurationPerfTable(PerfCollectionTable):
 
     def graphs(self) -> list[type[CollectionGraph]]:
         return []
+
+
+class ITLBWalkDurationPerfTable(PerfCollectionTable):
+    @classmethod
+    def name(cls) -> str:
+        return "itlb_walk_duration"
+
+    @classmethod
+    def ev_type(cls) -> int:
+        return PerfType.RAW
+
+    @classmethod
+    def ev_config(cls) -> int:
+        return 0
+
+    @classmethod
+    def hw_ids(cls) -> list[CustomHWEventID]:
+        return [
+            CustomHWEventID(name="ITLB_MISSES", umask="WALK_DURATION"),
+        ]
+
+    @classmethod
+    def component_name(cls) -> str:
+        return "iTLB"
+
+    @classmethod
+    def measured_event_name(cls) -> str:
+        return "Walk Durations"
+
+    @classmethod
+    def from_df(cls, table: pl.DataFrame) -> "ITLBWalkDurationPerfTable":
+        return ITLBWalkDurationPerfTable(table=table.cast(cls.schema(), strict=True))  # pyright: ignore [reportArgumentType]
+
+    def __init__(self, table: pl.DataFrame):
+        self._table = table
+
+    @property
+    def table(self) -> pl.DataFrame:
+        return self._table
+
+    def filtered_table(self) -> pl.DataFrame:
+        return self.table
+
+    def graphs(self) -> list[type[CollectionGraph]]:
+        return []
+
+
+class DTLBLoadsPerfTable(PerfCollectionTable):
+    @classmethod
+    def name(cls) -> str:
+        return "dtlb_loads"
+
+    @classmethod
+    def ev_type(cls) -> int:
+        return PerfType.HW_CACHE
+
+    @classmethod
+    def ev_config(cls) -> int:
+        return PerfHWCacheConfig.config(
+            cache=PerfHWCacheConfig.Cache.PERF_COUNT_HW_CACHE_DTLB,
+            op=PerfHWCacheConfig.Op.PERF_COUNT_HW_CACHE_OP_READ,
+            result=PerfHWCacheConfig.Result.PERF_COUNT_HW_CACHE_RESULT_ACCESS,
+        )
+
+    @classmethod
+    def hw_ids(cls) -> list[CustomHWEventID]:
+        return []
+
+    @classmethod
+    def component_name(cls) -> str:
+        return "dTLB"
+
+    @classmethod
+    def measured_event_name(cls) -> str:
+        return "Loads"
+
+    @classmethod
+    def from_df(cls, table: pl.DataFrame) -> "DTLBLoadsPerfTable":
+        return DTLBLoadsPerfTable(table=table.cast(cls.schema(), strict=True))  # pyright: ignore [reportArgumentType]
+
+    def __init__(self, table: pl.DataFrame):
+        self._table = table
+
+    @property
+    def table(self) -> pl.DataFrame:
+        return self._table
+
+    def filtered_table(self) -> pl.DataFrame:
+        return self.table
+
+    def graphs(self) -> list[type[CollectionGraph]]:
+        return [DTLBLoadsRateGraph]
+
+
+class DTLBLoadsRateGraph(RatePerfGraph):
+    @classmethod
+    def perf_table_type(cls) -> type[PerfCollectionTable]:
+        return DTLBLoadsPerfTable
+
+    @classmethod
+    def with_graph_engine(cls, graph_engine: GraphEngine) -> CollectionGraph | None:
+        perf_table = graph_engine.collection_data.get(cls.perf_table_type())
+        if perf_table is not None:
+            return DTLBLoadsRateGraph(graph_engine=graph_engine, perf_table=perf_table)
+        return None
+
+
+class ITLBLoadsPerfTable(PerfCollectionTable):
+    @classmethod
+    def name(cls) -> str:
+        return "itlb_loads"
+
+    @classmethod
+    def ev_type(cls) -> int:
+        return PerfType.HW_CACHE
+
+    @classmethod
+    def ev_config(cls) -> int:
+        return PerfHWCacheConfig.config(
+            cache=PerfHWCacheConfig.Cache.PERF_COUNT_HW_CACHE_ITLB,
+            op=PerfHWCacheConfig.Op.PERF_COUNT_HW_CACHE_OP_READ,
+            result=PerfHWCacheConfig.Result.PERF_COUNT_HW_CACHE_RESULT_ACCESS,
+        )
+
+    @classmethod
+    def hw_ids(cls) -> list[CustomHWEventID]:
+        return []
+
+    @classmethod
+    def component_name(cls) -> str:
+        return "iTLB"
+
+    @classmethod
+    def measured_event_name(cls) -> str:
+        return "Loads"
+
+    @classmethod
+    def from_df(cls, table: pl.DataFrame) -> "ITLBLoadsPerfTable":
+        return ITLBLoadsPerfTable(table=table.cast(cls.schema(), strict=True))  # pyright: ignore [reportArgumentType]
+
+    def __init__(self, table: pl.DataFrame):
+        self._table = table
+
+    @property
+    def table(self) -> pl.DataFrame:
+        return self._table
+
+    def filtered_table(self) -> pl.DataFrame:
+        return self.table
+
+    def graphs(self) -> list[type[CollectionGraph]]:
+        return [ITLBLoadsRateGraph]
+
+
+class ITLBLoadsRateGraph(RatePerfGraph):
+    @classmethod
+    def perf_table_type(cls) -> type[PerfCollectionTable]:
+        return ITLBLoadsPerfTable
+
+    @classmethod
+    def with_graph_engine(cls, graph_engine: GraphEngine) -> CollectionGraph | None:
+        perf_table = graph_engine.collection_data.get(cls.perf_table_type())
+        if perf_table is not None:
+            return ITLBLoadsRateGraph(graph_engine=graph_engine, perf_table=perf_table)
+        return None
