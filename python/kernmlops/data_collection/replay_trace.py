@@ -33,9 +33,9 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import subprocess
-import sys
 import time
 from collections import Counter
 from dataclasses import dataclass, field
@@ -43,6 +43,8 @@ from pathlib import Path
 
 import polars as pl
 import redis
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -211,7 +213,7 @@ def setup_system() -> SystemConfig:
         ksm_run=(_KSM_PATH.read_text().strip() if _KSM_PATH.exists() else None),
     )
 
-    print("Setting up system configuration ...", file=sys.stderr)
+    logger.info("Setting up system configuration ...")
     _sysfs_write(_THP_PATH, "always")
     _sysfs_write(_THP_DEFRAG_PATH, "never")
     _sysfs_write(_KHUGEPAGED_SLEEP_PATH, "4294967295")  # max uint32 — disables scanning
@@ -222,7 +224,7 @@ def setup_system() -> SystemConfig:
         _sysfs_write(_COMPACTION_PROACTIVENESS_PATH, "0")
     if config.ksm_run is not None:
         _sysfs_write(_KSM_PATH, "0")
-    print("System configuration applied.", file=sys.stderr)
+    logger.info("System configuration applied.")
 
     return config
 
@@ -233,7 +235,7 @@ def teardown_system(config: SystemConfig) -> None:
     Args:
         config: The ``SystemConfig`` returned by :func:`setup_system`.
     """
-    print("Restoring system configuration ...", file=sys.stderr)
+    logger.info("Restoring system configuration ...")
 
     # The THP and defrag files store e.g. "always [madvise] never"; restore
     # only the bracketed (active) word.
@@ -253,7 +255,7 @@ def teardown_system(config: SystemConfig) -> None:
     if config.ksm_run is not None:
         _sysfs_write(_KSM_PATH, config.ksm_run)
 
-    print("System configuration restored.", file=sys.stderr)
+    logger.info("System configuration restored.")
 
 
 # ---------------------------------------------------------------------------
@@ -373,10 +375,12 @@ def _invoke_break_page(key: str, line_no: int, breakpoint: int) -> None:
         if break_page(key):
             return
 
-    print(
-        f"WARNING (line {line_no}): break_page failed for key "
-        f"'{key}' at access {breakpoint} after {BREAK_PAGE_MAX_ATTEMPTS} attempts; continuing.",
-        file=sys.stderr,
+    logger.warning(
+        "line %d: break_page failed for key '%s' at access %d after %d attempts; continuing.",
+        line_no,
+        key,
+        breakpoint,
+        BREAK_PAGE_MAX_ATTEMPTS,
     )
 
 
@@ -404,10 +408,12 @@ def _execute(
             return True
         except redis.RedisError as exc:
             if attempt == EXECUTE_MAX_ATTEMPTS - 1:
-                print(
-                    f"WARNING (line {line_no}): Redis error on "
-                    f"{cmd.command} '{cmd.key}': {exc}",
-                    file=sys.stderr,
+                logger.warning(
+                    "line %d: Redis error on %s '%s': %s",
+                    line_no,
+                    cmd.command,
+                    cmd.key,
+                    exc,
                 )
     return False
 
@@ -459,9 +465,12 @@ def run_benchmark(
 
             for run in range(1, runs + 1):
                 # 1. Restore snapshot
-                print(
-                    f"[{idx + 1}/{n_combos} run {run}/{runs}] Restoring snapshot ...",
-                    file=sys.stderr,
+                logger.info(
+                    "[%d/%d run %d/%d] Restoring snapshot ...",
+                    idx + 1,
+                    n_combos,
+                    run,
+                    runs,
                 )
                 restore_snapshot(client, snapshot_path)
 
@@ -469,18 +478,25 @@ def run_benchmark(
                 memory_purge(client)
 
                 # 3. Timed run replay
-                print(
-                    f"[{idx + 1}/{n_combos} run {run}/{runs}] Timing run trace ...",
-                    file=sys.stderr,
+                logger.info(
+                    "[%d/%d run %d/%d] Timing run trace ...",
+                    idx + 1,
+                    n_combos,
+                    run,
+                    runs,
                 )
                 t0 = time.perf_counter()
                 total_cmds = replay(run_trace, client, breakpoints=breakpoints)
                 runtime_s = time.perf_counter() - t0
 
-                print(
-                    f"[{idx + 1}/{n_combos} run {run}/{runs}] Done — "
-                    f"{total_cmds} commands in {runtime_s:.3f}s",
-                    file=sys.stderr,
+                logger.info(
+                    "[%d/%d run %d/%d] Done — %d commands in %.3fs",
+                    idx + 1,
+                    n_combos,
+                    run,
+                    runs,
+                    total_cmds,
+                    runtime_s,
                 )
                 row_result[f"runtime_s_{run}"] = runtime_s
 
@@ -488,7 +504,7 @@ def run_benchmark(
 
         output.parent.mkdir(parents=True, exist_ok=True)
         pl.DataFrame(results).write_parquet(output)
-        print(f"Results written to {output}", file=sys.stderr)
+        logger.info("Results written to %s", output)
     finally:
         teardown_system(sys_config)
 
@@ -547,6 +563,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=3,
         help="Number of times to replay each breakpoint combination (default: 3).",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable verbose output including warnings.",
+    )
     return parser
 
 
@@ -554,6 +576,11 @@ def main() -> None:
     """Entry point for the replay_trace CLI."""
     parser = _build_parser()
     args = parser.parse_args()
+
+    logging.basicConfig(
+        format="%(levelname)s: %(message)s",
+        level=logging.INFO if args.verbose else logging.ERROR,
+    )
 
     snapshot_path: Path = args.snapshot
     run_trace: Path = args.run_trace
