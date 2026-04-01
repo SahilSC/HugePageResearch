@@ -424,6 +424,7 @@ def run_benchmark(
     host: str,
     port: int,
     output: Path,
+    runs: int = 3,
 ) -> None:
     """For each breakpoint combination: restore snapshot, then time the run.
 
@@ -432,11 +433,9 @@ def run_benchmark(
     settings unconditionally via :func:`teardown_system` in a ``finally``
     block.
 
-    Steps per combination:
-
-    1. Restore the RDB snapshot — exact key-value layout from the load phase.
-    2. ``MEMORY PURGE`` — reset allocator state.
-    3. Time the replay of *run_trace* with this combination's breakpoints.
+    Each combination is replayed *runs* times. The output Parquet file
+    contains the breakpoint vector plus ``runtime_s_1``, ``runtime_s_2``,
+    etc. columns — one per run.
 
     Args:
         snapshot_path: Path to ``snapshot.rdb`` from ``capture_redis_trace.sh``.
@@ -445,6 +444,7 @@ def run_benchmark(
         host: Redis server hostname or IP.
         port: Redis server port.
         output: Destination Parquet file for results.
+        runs: Number of times to replay each breakpoint combination.
     """
     client = redis.Redis(host=host, port=port)
 
@@ -455,25 +455,36 @@ def run_benchmark(
     try:
         for idx, row in enumerate(breakpoints_df.iter_rows(named=True)):
             breakpoints: dict[str, int] = dict(row)
+            row_result: dict = {**breakpoints}
 
-            # 1. Restore snapshot
-            print(f"[{idx + 1}/{n_combos}] Restoring snapshot ...", file=sys.stderr)
-            restore_snapshot(client, snapshot_path)
+            for run in range(1, runs + 1):
+                # 1. Restore snapshot
+                print(
+                    f"[{idx + 1}/{n_combos} run {run}/{runs}] Restoring snapshot ...",
+                    file=sys.stderr,
+                )
+                restore_snapshot(client, snapshot_path)
 
-            # 2. Post-restore memory purge
-            memory_purge(client)
+                # 2. Post-restore memory purge
+                memory_purge(client)
 
-            # 3. Timed run replay
-            print(f"[{idx + 1}/{n_combos}] Timing run trace ...", file=sys.stderr)
-            t0 = time.perf_counter()
-            total_cmds = replay(run_trace, client, breakpoints=breakpoints)
-            runtime_s = time.perf_counter() - t0
+                # 3. Timed run replay
+                print(
+                    f"[{idx + 1}/{n_combos} run {run}/{runs}] Timing run trace ...",
+                    file=sys.stderr,
+                )
+                t0 = time.perf_counter()
+                total_cmds = replay(run_trace, client, breakpoints=breakpoints)
+                runtime_s = time.perf_counter() - t0
 
-            print(
-                f"[{idx + 1}/{n_combos}] Done — {total_cmds} commands in {runtime_s:.3f}s",
-                file=sys.stderr,
-            )
-            results.append({**breakpoints, "runtime_s": runtime_s})
+                print(
+                    f"[{idx + 1}/{n_combos} run {run}/{runs}] Done — "
+                    f"{total_cmds} commands in {runtime_s:.3f}s",
+                    file=sys.stderr,
+                )
+                row_result[f"runtime_s_{run}"] = runtime_s
+
+            results.append(row_result)
 
         output.parent.mkdir(parents=True, exist_ok=True)
         pl.DataFrame(results).write_parquet(output)
@@ -530,6 +541,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=Path("data/results.parquet"),
         help="Output Parquet file for results (default: data/results.parquet).",
     )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=3,
+        help="Number of times to replay each breakpoint combination (default: 3).",
+    )
     return parser
 
 
@@ -560,6 +577,7 @@ def main() -> None:
         host=args.host,
         port=args.port,
         output=args.output,
+        runs=args.runs,
     )
 
 
