@@ -17,11 +17,14 @@ untouched.
   `measure_bloat.py` with that output path
 - tightened `.gitignore` so it keeps both the `main` output ignores and the
   `messy-dir` local research ignores
-- made BPF hook registration lazy so unit tests that only need page-access or
-  VAPTR logic do not eagerly import `bcc`
-- simplified `python/kernmlops/data_collection/bpf_instrumentation/__init__.py`
-  so it reads more like the old `messy-dir` file while keeping lazy hook
-  loading
+- reverted the earlier lazy-import experiment for collector hooks and restored a
+  `main`-style eager import layout in
+  `python/kernmlops/data_collection/bpf_instrumentation/__init__.py`,
+  `python/kernmlops/data_collection/__init__.py`, and
+  `python/kernmlops/data_schema/__init__.py`
+- installed Ubuntu's `python3-bpfcc` package and updated the local `.venv` to
+  include system site-packages so the eager import path works in the repo's
+  normal test environment
 - added `reports/README.md` as a simple index for the reports area
 - removed obvious local scratch files:
   - `.tmp_validate.py`
@@ -38,62 +41,55 @@ untouched.
 
 ## Why It Works
 
-The main functional issue was import-time coupling. Before this pass, importing
-`data_collection.page_access` or the VAPTR hook pulled in the entire BPF hook
-registry, which in turn pulled perf-related schema code and its `bcc`
-dependency. That made focused tests fail before they could even reach the code
-under test.
+The cleanup branch briefly used lazy imports to avoid loading `bcc` during light
+unit tests. That did work technically, but it made the import files feel more
+complicated than the user wanted.
 
-The fix was to keep the same runtime behavior but defer loading:
+The current chosen approach is simpler:
 
-- `python/kernmlops/data_collection/__init__.py` now resolves hook names lazily
-- `python/kernmlops/data_collection/bpf_instrumentation/__init__.py` now keeps
-  the old hook order and export shape, but loads hook classes only when a
-  specific hook is requested
-- `python/kernmlops/data_schema/__init__.py` now defers perf table loading until
-  the perf registry is actually requested
+- install the actual Ubuntu `bcc` bindings used by the project
+- let the repo `.venv` see that system package
+- keep the collector import files close to `main` so the registry remains easy
+  to read
 
-That keeps the collector behavior intact while making the test/import path much
-less fragile.
+That means the eager import path is back, but the environment now satisfies it.
 
 ## Tests Run
 
-- `python -m py_compile measure_bloat.py python/kernmlops/data_collection/__init__.py python/kernmlops/data_collection/bpf_instrumentation/__init__.py`
-- `python -m unittest testing.test_page_access testing.test_vaptr_hook`
-- `python -m py_compile testing/test_bpf_instrumentation_init.py`
-- `python -m unittest testing.test_bpf_instrumentation_init testing.test_page_access testing.test_vaptr_hook`
-- `python -c 'import data_collection; ...'` smoke check confirming the perf hook
-  stays unloaded on package import
+- `sudo apt-get install -y python3-bpfcc bpfcc-tools python3.12-venv`
+- `perl -0pi -e 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg`
+- `.venv/bin/python -m unittest testing.test_bpf_instrumentation_init testing.test_page_access testing.test_vaptr_hook`
+- `.venv/bin/python - <<'PY' ... compile(...) ... PY` syntax smoke check for the
+  touched Python files
 
 Result:
 
-- the unit tests passed after the lazy-import fix
-- the syntax check for the touched Python files passed
-- the simplified `bpf_instrumentation.__init__` kept the readable hook ordering
-  while still leaving `data_collection.bpf_instrumentation.perf.perf_hook`
-  unloaded during light import paths
+- the eager-import version passed the targeted unit tests once `bcc` was
+  installed and visible from `.venv`
+- the import files are back to a much more direct `main`-style layout
+- the local regression test now checks the registry shape instead of lazy-load
+  behavior
 
 ## Issues Encountered
 
-- `python -m py_compile python/kernmlops/data_schema/__init__.py` hit a
-  permission error writing `__pycache__/__init__.cpython-312.pyc`
-- rerunning with `PYTHONDONTWRITEBYTECODE=1` still hit the same stale cache
-  permission path, so I relied on the successful unit-test run and the other
-  syntax checks instead
-- the import failures during testing were useful: they exposed that the
-  remaining coupling was in `data_schema.__init__`, not in the VAPTR/page-access
-  code itself
+- the repo `.venv` originally hid system site-packages, so installing
+  `python3-bpfcc` was not enough until `.venv/pyvenv.cfg` was updated
+- `py_compile` still hit a stale `__pycache__` permission problem under
+  `python/kernmlops/data_schema/`, so syntax validation was done with direct
+  `compile(...)` calls instead
 
 ## Approaches Considered
 
 - broad cleanup across the whole repo
 - collector-only cleanup without touching import behavior
 - minimal structural cleanup plus a targeted import-lazy refactor
+- installing `bcc` and reverting to a `main`-style eager import layout
 
 Chosen path:
 
-- the targeted refactor, because it fixed a real testability problem without
-  turning this pass into a large architectural rewrite
+- install `bcc` and keep the imports simple, because that matches the user's
+  preference for readable registry files and avoids adding more indirection than
+  the repo needs right now
 
 ## Pros And Cons
 
@@ -103,15 +99,14 @@ Pros:
 - removes obvious tracked clutter without changing the collector design
 - gets branch-added notes out of the repo root without deleting the useful ones
 - makes the page-access and VAPTR tests easier to run and reason about
-- makes `bpf_instrumentation.__init__.py` much easier to scan than the tuple
-  registry version
+- keeps `bpf_instrumentation.__init__.py` and related imports much closer to the
+  leaner `main` branch style
 - leaves inherited base-repo artifacts in place
 
 Cons:
 
 - the repo still has deeper doc sprawl and some semantic drift outside this pass
-- `data_schema` is still a fairly central import hub, so a few transitive
-  imports remain opinionated
+- the repo now depends more directly on local Ubuntu BCC packages being present
 - `measure_bloat.py` was only nudged to a better output path; it still uses a
   hardcoded data location and could be cleaned further later, but I reverted the
   output-path change to avoid changing inherited base-repo artifacts

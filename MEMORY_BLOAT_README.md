@@ -116,14 +116,32 @@ The system works by:
 cd /users/SahilSC/HugePageResearch
 ```
 
-2. Reconfirm that the machine is now running the custom kernel.
+2. If you want to open or manage GitHub PRs from this machine, ensure `gh` is installed and authenticated.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y gh
+gh auth login
+gh auth status
+```
+
+3. Ensure the repo venv can import the system-installed BCC bindings.
+
+```bash
+sudo apt-get update
+sudo apt-get install -y python3-bpfcc bpfcc-tools python3.12-venv
+perl -0pi -e 's/include-system-site-packages = false/include-system-site-packages = true/' .venv/pyvenv.cfg
+.venv/bin/python -c "import bcc; print(bcc.__file__)"
+```
+
+4. Reconfirm that the machine is now running the custom kernel.
 
 ```bash
 uname -r
 ls -l /boot/vmlinuz /boot/initrd.img /lib/modules/6.8.12-splitthp
 ```
 
-3. Rerun the syscall verifiers on the live patched kernel.
+5. Rerun the syscall verifiers on the live patched kernel.
 
 ```bash
 cd /users/SahilSC/HugePageResearch/tests/syscall_verification
@@ -131,21 +149,21 @@ cd /users/SahilSC/HugePageResearch/tests/syscall_verification
 ./cross_process_split_verify
 ```
 
-4. If a later reboot lands on the stock kernel, do a one-shot GRUB reboot back into the custom entry.
+6. If a later reboot lands on the stock kernel, do a one-shot GRUB reboot back into the custom entry.
 
 ```bash
 sudo grub-reboot "Advanced options for Ubuntu>Ubuntu, with Linux 6.8.12-splitthp"
 sudo reboot
 ```
 
-5. If you want to boot the stock Ubuntu kernel for comparison, do a one-shot GRUB reboot into it.
+7. If you want to boot the stock Ubuntu kernel for comparison, do a one-shot GRUB reboot into it.
 
 ```bash
 sudo grub-reboot "Advanced options for Ubuntu>Ubuntu, with Linux 6.8.0-101-generic"
 sudo reboot
 ```
 
-6. If you need to rebuild the custom kernel later and the Ubuntu source tree is missing, recreate it.
+8. If you need to rebuild the custom kernel later and the Ubuntu source tree is missing, recreate it.
 
 ```bash
 cd /users/SahilSC/HugePageResearch

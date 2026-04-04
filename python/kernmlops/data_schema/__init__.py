@@ -1,10 +1,10 @@
 """Library for maintaining, manipulating, and using schemas."""
 
 import os
-from importlib import import_module
 from pwd import getpwnam
 from typing import Callable
 
+from data_schema import perf
 from data_schema.block_io import BlockIOLatencyTable, BlockIOQueueTable, BlockIOTable
 from data_schema.file_data import FileDataTable
 from data_schema.generic_table import ProcessMetadataTable
@@ -41,14 +41,9 @@ _BASE_TABLE_TYPES: list[type[CollectionTable]] = [
     VAPtrTable,
 ]
 
-
-def __getattr__(name: str):
-    if name == "perf":
-        return import_module("data_schema.perf")
-    if name == "table_types":
-        perf = import_module("data_schema.perf")
-        return _BASE_TABLE_TYPES + list(perf.perf_table_types.values())
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+table_types: list[type[CollectionTable]] = _BASE_TABLE_TYPES + list(
+    perf.perf_table_types.values()
+)
 
 
 def demote(
