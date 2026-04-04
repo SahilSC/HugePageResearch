@@ -39,5 +39,5 @@ collector_config:
       - memory_usage
       - perf
       - process_trace
-      - smaps_harness
+      - smaps_hook
       - vmstat_harness

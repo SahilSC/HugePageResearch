@@ -92,6 +92,9 @@ format:
 	ruff check --select I --fix python
 	ruff format --exclude "*.ipynb"
 
+build-redis-module:
+	$(MAKE) -C redis-module
+
 
 # Python commands
 collect:

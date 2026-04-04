@@ -39,7 +39,7 @@ make_docker_image() {
 source_shell() {
     SHELL_CMD="script -c \"${SHELL} -cl '${PIPENV_SHELL}; exec zsh'\""
     echo ${SHELL_CMD}
-    sudo su ${USER} -g docker -c "${SHELL_CMD}"
+    sudo su ${USER} -g docker -c "cd $(pwd) && ${SHELL_CMD}"
 }
 
 . /etc/os-release
