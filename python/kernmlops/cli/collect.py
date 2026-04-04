@@ -113,13 +113,16 @@ def _clean_redis_collection(
         how="diagonal_relaxed",
     )
     redis_tgids = _discover_redis_server_tgids(process_trace_df)
-    if len(redis_tgids) != 1:
-        raise RuntimeError("more than 1 redis_tgids\n" + redis_tgids)
-    
     if not redis_tgids:
         raise RuntimeError(
             "redis cleaner failed fast: could not find redis-server TGID in process_trace "
             "(run with --no-clean to skip cleaning)"
+        )
+    if len(redis_tgids) != 1:
+        sorted_tgids = ", ".join(str(tgid) for tgid in sorted(redis_tgids))
+        raise RuntimeError(
+            "redis cleaner failed fast: expected exactly one redis-server TGID, got "
+            f"{sorted_tgids}"
         )
 
     cleaned_collection_id = f"cleaned{collection_id}"

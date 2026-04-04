@@ -508,3 +508,9 @@ class THPInterventionHook(BPFProgram):
         tables = self.data()
         self.clear()
         return tables
+
+
+class SmapsHarnessHook(THPInterventionHook):
+    @classmethod
+    def name(cls) -> str:
+        return "smaps_harness"

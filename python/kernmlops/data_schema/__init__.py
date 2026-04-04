@@ -12,7 +12,6 @@ from data_schema.huge_pages import CollapseHugePageDataTable
 from data_schema.memory_usage import MemoryUsageTable
 from data_schema.proc_maps import ProcMapsTable
 from data_schema.proc_smaps import ProcSmapsTable
-from data_schema.vaptr import VAPtrTable
 from data_schema.quanta_runtime import QuantaQueuedTable, QuantaRuntimeTable
 from data_schema.schema import (
     UPTIME_TIMESTAMP,
@@ -24,6 +23,7 @@ from data_schema.schema import (
     collection_id_column,
     cumulative_pma_as_pdf,
 )
+from data_schema.vaptr import VAPtrTable
 
 _BASE_TABLE_TYPES: list[type[CollectionTable]] = [
     SystemInfoTable,

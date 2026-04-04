@@ -3,6 +3,10 @@
 This directory contains standalone user-space verifiers for the custom
 `split_thp(pid, vaddr)` syscall added to the Ubuntu `6.8.0-101.101` kernel tree.
 
+If you are starting on a fresh machine and need the full kernel build,
+patch-application, reboot, and verification flow, follow [`SETUP.md`](../../SETUP.md)
+first and then return here for the verifier details.
+
 ## Files
 
 - `split_thp_cli`: small manual syscall invoker for `pid + vaddr`
@@ -13,7 +17,7 @@ This directory contains standalone user-space verifiers for the custom
 ## Build
 
 ```bash
-cd /users/SahilSC/HugePageResearch/tests/syscall_verification
+cd ~/HugePageResearch/tests/syscall_verification
 make
 ```
 
@@ -28,7 +32,7 @@ verifiers should stop with `ENOSYS`.
 Run the self-process verifier:
 
 ```bash
-cd /users/SahilSC/HugePageResearch/tests/syscall_verification
+cd ~/HugePageResearch/tests/syscall_verification
 ./self_split_verify
 ```
 
@@ -49,7 +53,7 @@ Expected behavior on the patched kernel:
 Run the parent/child verifier:
 
 ```bash
-cd /users/SahilSC/HugePageResearch/tests/syscall_verification
+cd ~/HugePageResearch/tests/syscall_verification
 ./cross_process_split_verify
 ```
 
@@ -75,21 +79,21 @@ For manual smoke validation, use a field value large enough to force
 Build the tools:
 
 ```bash
-cd /users/SahilSC/HugePageResearch/tests/syscall_verification
+cd ~/HugePageResearch/tests/syscall_verification
 make
 ```
 
 Build the Redis module:
 
 ```bash
-cd /users/SahilSC/HugePageResearch/redis-module
+cd ~/HugePageResearch/redis-module
 make
 ```
 
 Start Redis with the repo config and the `VAPTR` module:
 
 ```bash
-cd /users/SahilSC/HugePageResearch
+cd ~/HugePageResearch
 redis-server ./config/redis.conf --loadmodule ./redis-module/vaptr.so
 ```
 
@@ -119,7 +123,7 @@ printf 'pid=%s addr=%s\n' "$REDIS_PID" "$ADDR"
 Check the target mapping before the split:
 
 ```bash
-cd /users/SahilSC/HugePageResearch/tests/syscall_verification
+cd ~/HugePageResearch/tests/syscall_verification
 ./mapping_info "$REDIS_PID" "$ADDR"
 ```
 

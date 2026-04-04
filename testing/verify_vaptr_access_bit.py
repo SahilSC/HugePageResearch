@@ -32,7 +32,9 @@ def maybe_hex(value: int | None) -> str | None:
 def latest_run_dir(run_root: Path, prefix: str) -> Path:
     candidates = sorted(path for path in run_root.glob(f"{prefix}*") if path.is_dir())
     if not candidates:
-        raise FileNotFoundError(f"no collection directories found for prefix {prefix!r}")
+        raise FileNotFoundError(
+            f"no collection directories found for prefix {prefix!r}"
+        )
     return candidates[-1]
 
 
@@ -82,7 +84,9 @@ def main() -> int:
     accessed_rows = valid_rows.filter(pl.col("access_bit"))
     physical_rows = vaptr_df.filter(pl.col("physical_page_addr").is_not_null())
     redis_rows = process_trace_df.filter(pl.col("name").str.starts_with("redis-server"))
-    redis_tgids = sorted(set(redis_rows["tgid"].to_list())) if not redis_rows.is_empty() else []
+    redis_tgids = (
+        sorted(set(redis_rows["tgid"].to_list())) if not redis_rows.is_empty() else []
+    )
 
     if physical_rows.is_empty():
         raise AssertionError("vaptr has no rows with physical-page metadata")

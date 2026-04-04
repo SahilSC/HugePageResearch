@@ -96,7 +96,9 @@ class VAPtrHook(BPFProgram):
             if result.returncode != 0:
                 return []
 
-            lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+            lines = [
+                line.strip() for line in result.stdout.splitlines() if line.strip()
+            ]
             if not lines:
                 return []
 
@@ -220,7 +222,9 @@ class VAPtrHook(BPFProgram):
                 page_addr=page_addr,
                 available=available,
                 mapped_pfn=None if access_result is None else access_result.mapped_pfn,
-                tracking_pfn=None if access_result is None else access_result.tracking_pfn,
+                tracking_pfn=None
+                if access_result is None
+                else access_result.tracking_pfn,
                 physical_page_addr=None
                 if access_result is None
                 else access_result.physical_page_addr,
@@ -267,14 +271,6 @@ class VAPtrHook(BPFProgram):
         lines = output.splitlines()
         raw_samples = list[tuple[str, str, str, bool, int | None]]()
 
-        # redis-cli --raw output format (no numbering, flat):
-        #   user0000000000000000
-        #   0x7f8a4c001234
-        #   user0000000000000001
-        #   0x7f8a4c005678
-        #   user0000000000000099
-        #   (nil)
-        # Lines come in pairs: key name, then address or (nil)
         for i in range(0, len(lines) - 1, 2):
             key_name = lines[i].strip()
             addr_str = lines[i + 1].strip()
@@ -293,7 +289,9 @@ class VAPtrHook(BPFProgram):
             else:
                 addr_str = "n/a"
                 page_addr = "n/a"
-            raw_samples.append((key_name, addr_str, page_addr, available, page_addr_int))
+            raw_samples.append(
+                (key_name, addr_str, page_addr, available, page_addr_int)
+            )
         return raw_samples
 
     def _prepare_pending_samples(
@@ -355,9 +353,11 @@ class VAPtrHook(BPFProgram):
 
         output = result.stdout.strip()
 
-        # Check if module is loaded on first successful connection
         if not self.module_verified:
-            if "ERR unknown command" in output or "ERR unknown command" in result.stderr:
+            if (
+                "ERR unknown command" in output
+                or "ERR unknown command" in result.stderr
+            ):
                 print(
                     "vaptr: ERROR - VAPTR command not recognized by redis-server. "
                     "Is the vaptr.so module loaded? The redis benchmark now auto-builds "

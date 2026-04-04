@@ -22,18 +22,16 @@ class GenericCollectorConfig(ConfigBase):
 
     def get_hooks(
         self,
-        hugepage_harness: ConfigBase | None = None,
         benchmark: Any | None = None,
+        hugepage_harness: ConfigBase | None = None,
     ) -> list[Any]:
         hooks = []
-        for hook_name in self.hooks:
-            hook_type = bpf.get_hook(hook_name)
-            if hook_type is None:
-                raise ValueError("Hook_name: ", hook_name, "Not found. Ignoring hook.")
-            if hook_name in ["thp_intervention", "vmstat_harness"]:
+        for hook_name, hook_type in bpf.all_hooks.items():
+            if hook_name not in self.hooks:
+                continue
+            if hook_name in ["smaps_harness", "thp_intervention", "vmstat_harness"]:
                 hooks.append(hook_type(hugepage_harness=hugepage_harness))
             elif hook_name == "vaptr" and benchmark is not None:
-
                 num_keys = getattr(
                     getattr(benchmark, "config", None), "vaptr_num_keys", 10
                 )
@@ -41,11 +39,7 @@ class GenericCollectorConfig(ConfigBase):
                     getattr(benchmark, "config", None), "vaptr_field_name", "field0"
                 )
                 key_names_fn = getattr(benchmark, "vaptr_key_names", None)
-                key_names = (
-                    key_names_fn(num_keys)
-                    if callable(key_names_fn)
-                    else None
-                )
+                key_names = key_names_fn(num_keys) if callable(key_names_fn) else None
                 hooks.append(
                     hook_type(
                         num_keys=num_keys,
@@ -53,12 +47,13 @@ class GenericCollectorConfig(ConfigBase):
                         key_names=key_names,
                     )
                 )
-            elif hook_name in ["proc_maps", "smaps_hook"] and benchmark is not None:
-                process_name = getattr(
-                    benchmark,
-                    "redis_server_name",
-                    lambda: benchmark.name(),
-                )()
+            elif hook_name in ["proc_maps", "smaps_hook"]:
+                process_name = "redis-server"
+                redis_server_name = getattr(benchmark, "redis_server_name", None)
+                if callable(redis_server_name):
+                    process_name = redis_server_name()
+                elif benchmark is not None:
+                    process_name = benchmark.name()
                 hooks.append(hook_type(process_name=process_name))
             else:
                 hooks.append(hook_type())

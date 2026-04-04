@@ -8,6 +8,8 @@ from data_schema.perf.tlb_perf import (
     DTLBPerfTable,
     DTLBLoadsPerfTable,
     DTLBWalkDurationPerfTable,
+    ITLBLoadsPerfTable,
+    ITLBPerfTable,
     ITLBWalkDurationPerfTable,
     TLBFlushPerfTable,
 )
@@ -22,8 +24,8 @@ from data_schema.perf.instructions_perf import InstructionsPerfTable
 perf_table_types: Mapping[str, type[PerfCollectionTable]] = {
     DTLBPerfTable.name(): DTLBPerfTable,
     DTLBLoadsPerfTable.name(): DTLBLoadsPerfTable,
-    # ITLBPerfTable.name(): ITLBPerfTable,
-    # ITLBLoadsPerfTable.name(): ITLBLoadsPerfTable,
+    ITLBPerfTable.name(): ITLBPerfTable,
+    ITLBLoadsPerfTable.name(): ITLBLoadsPerfTable,
     TLBFlushPerfTable.name(): TLBFlushPerfTable,
     DTLBWalkDurationPerfTable.name(): DTLBWalkDurationPerfTable,
     ITLBWalkDurationPerfTable.name(): ITLBWalkDurationPerfTable,

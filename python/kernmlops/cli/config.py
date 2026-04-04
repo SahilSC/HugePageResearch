@@ -3,6 +3,7 @@ from dataclasses import field, make_dataclass
 from data_collection import CollectorConfig
 from kernmlops_benchmark import BenchmarkConfig
 from kernmlops_config import ConfigBase
+from kernmlops_config.hugepage_harness import HugepageHarnessConfig
 
 from kernmlops_config.hugepage_harness import HugepageHarnessConfig
 

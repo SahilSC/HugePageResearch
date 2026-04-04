@@ -240,6 +240,20 @@ Then `make collect` or `make collect-data` will use the overrides set.
 If an unknown configuration parameter is set (i.e. `benchmark_cfg`) and
 error will be thrown before collection begins.
 
+## Where To Read Next
+
+If you want to understand the collector internals instead of only running the
+top-level commands, start with these subsystem guides:
+
+- [`python/kernmlops/data_collection/README.md`](python/kernmlops/data_collection/README.md)
+  explains how the collector package turns configured hook names into running
+  instrumentation.
+- [`python/kernmlops/data_collection/bpf_instrumentation/README.md`](python/kernmlops/data_collection/bpf_instrumentation/README.md)
+  explains what a hook is in this repository and where the built-in BPF-backed
+  hooks live.
+- [`docs/Add-Perf-Counter.md`](docs/Add-Perf-Counter.md) walks through adding a
+  new perf counter when a machine exposes different event names.
+
 ## Troubleshooting: Or How I Learned to Shoot My Foot
 
 ### eBPF Programs
@@ -315,3 +329,10 @@ If you see the above error, you probably have stray `rdb` files that are causing
 ways. Ensure that `load_from_rdb` is not set to true in the `redis` section of
 your benchmark config or always ensure that `dump.rdb` is not present before
 starting a collection!
+
+## Setup Guide
+
+For the complete fresh-machine bring-up path, including Docker bootstrap,
+Redis/YCSB setup, applying the `split_thp` kernel patch, building the custom
+`6.8.12-splitthp` kernel, rebooting into it, and running the syscall verifiers,
+see [SETUP.md](./SETUP.md).

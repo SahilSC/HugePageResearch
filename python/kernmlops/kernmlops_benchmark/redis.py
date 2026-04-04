@@ -4,8 +4,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
-from typing import cast
+from typing import Literal, cast
 
 from data_schema import GraphEngine, demote
 from kernmlops_benchmark.benchmark import Benchmark, GenericBenchmarkConfig
@@ -109,7 +108,9 @@ class RedisBenchmark(Benchmark):
 
         vaptr_src = vaptr_dir / "vaptr.c"
         if not vaptr_src.exists():
-            raise BenchmarkError("vaptr hook requested but redis-module/vaptr.c is missing")
+            raise BenchmarkError(
+                "vaptr hook requested but redis-module/vaptr.c is missing"
+            )
 
         build = subprocess.run(
             ["make", "-C", str(vaptr_dir)],
@@ -118,8 +119,7 @@ class RedisBenchmark(Benchmark):
         )
         if build.returncode != 0 or not vaptr_so.exists():
             raise BenchmarkError(
-                "Failed to build redis vaptr module:\n"
-                f"{build.stdout}\n{build.stderr}"
+                f"Failed to build redis vaptr module:\n{build.stdout}\n{build.stderr}"
             )
         return vaptr_so
 

@@ -93,7 +93,9 @@ class PageAccessTracker:
             file_obj.close()
 
     def sample(self, pid: int, virtual_address: int) -> PageAccessResult:
-        return self.sample_many([PageAccessRequest(pid=pid, virtual_address=virtual_address)])[0]
+        return self.sample_many(
+            [PageAccessRequest(pid=pid, virtual_address=virtual_address)]
+        )[0]
 
     def resolve_many(
         self,
@@ -110,7 +112,8 @@ class PageAccessTracker:
             {
                 page.tracking_pfn
                 for page in resolved_list
-                if page.tracking_pfn is not None and page.tracking_pfn in self._armed_pfns
+                if page.tracking_pfn is not None
+                and page.tracking_pfn in self._armed_pfns
             }
         )
         idle_by_pfn = {pfn: self._read_page_idle(pfn) for pfn in known_pfns}

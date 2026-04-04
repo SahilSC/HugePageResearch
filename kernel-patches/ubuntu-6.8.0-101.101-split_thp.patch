@@ -1,0 +1,121 @@
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -383,6 +383,7 @@
+ 459	common	lsm_get_self_attr	sys_lsm_get_self_attr
+ 460	common	lsm_set_self_attr	sys_lsm_set_self_attr
+ 461	common	lsm_list_modules	sys_lsm_list_modules
++462	64	split_thp		sys_split_thp
+ 
+ #
+ # Due to a historical design error, certain syscalls are numbered differently
+
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -976,6 +976,7 @@
+  */
+ 
+ /* x86 */
++asmlinkage long sys_split_thp(pid_t pid, unsigned long vaddr);
+ asmlinkage long sys_ioperm(unsigned long from, unsigned long num, int on);
+ 
+ /* pciconfig: alpha, arm, arm64, ia64, sparc */
+
+--- a/mm/huge_memory.c
++++ b/mm/huge_memory.c
+@@ -35,9 +35,11 @@
+ #include <linux/oom.h>
+ #include <linux/numa.h>
+ #include <linux/page_owner.h>
++#include <linux/ptrace.h>
+ #include <linux/sched/sysctl.h>
+ #include <linux/memory-tiers.h>
+ #include <linux/compat.h>
++#include <linux/syscalls.h>
+ 
+ #include <asm/tlb.h>
+ #include <asm/pgalloc.h>
+@@ -3279,6 +3281,84 @@
+ 	return split;
+ }
+ 
++static inline bool vma_not_suitable_for_thp_split(struct vm_area_struct *vma)
++{
++	return vma_is_special_huge(vma) || (vma->vm_flags & VM_IO) ||
++		    is_vm_hugetlb_page(vma);
++}
++
++static int split_thp_vaddr_locked(struct mm_struct *mm, unsigned long vaddr)
++{
++	struct vm_area_struct *vma;
++	struct page *page;
++	struct folio *folio;
++	int ret;
++
++	vma = vma_lookup(mm, vaddr);
++	if (!vma)
++		return -EFAULT;
++
++	if (vma_not_suitable_for_thp_split(vma))
++		return -ENOENT;
++
++	/* FOLL_DUMP skips special mappings such as the huge zero page. */
++	page = follow_page(vma, vaddr, FOLL_GET | FOLL_DUMP);
++	if (IS_ERR_OR_NULL(page))
++		return -EFAULT;
++
++	folio = page_folio(page);
++	if (!is_transparent_hugepage(folio)) {
++		ret = -ENOENT;
++		goto out_put;
++	}
++
++	if (!can_split_folio(folio, NULL)) {
++		ret = -EAGAIN;
++		goto out_put;
++	}
++
++	if (!folio_trylock(folio)) {
++		ret = -EAGAIN;
++		goto out_put;
++	}
++
++	ret = split_folio(folio);
++	folio_unlock(folio);
++
++out_put:
++	folio_put(folio);
++	return ret;
++}
++
++SYSCALL_DEFINE2(split_thp, pid_t, pid, unsigned long, vaddr)
++{
++	struct task_struct *task;
++	struct mm_struct *mm;
++	int ret;
++
++	vaddr &= PAGE_MASK;
++
++	task = find_get_task_by_vpid(pid);
++	if (!task)
++		return -ESRCH;
++
++	mm = mm_access(task, PTRACE_MODE_ATTACH_REALCREDS);
++	put_task_struct(task);
++	if (IS_ERR(mm)) {
++		ret = PTR_ERR(mm);
++		return ret == -EACCES ? -EPERM : ret;
++	}
++	if (!mm)
++		return -ESRCH;
++
++	mmap_read_lock(mm);
++	ret = split_thp_vaddr_locked(mm, vaddr);
++	mmap_read_unlock(mm);
++	mmput(mm);
++
++	return ret;
++}
++
+ #ifdef CONFIG_DEBUG_FS
+ static void split_huge_pages_all(void)
+ {

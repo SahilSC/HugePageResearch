@@ -9,6 +9,7 @@ dependencies = [
   "click>=8.1.0",
   "click-default-group>=1.2.0",
   "matplotlib>=3.9.0",
+  "numpy>=1.26.0",
   "osquery>=3.1.0",
   "plotext>=5.3.0",
   "pre-commit>=4.0",
@@ -26,4 +27,5 @@ dependencies = [
   "plotnine",
   "pyarrow",
   "seaborn>=0.13.2",
+  "redis>=7.4.0",
 ]

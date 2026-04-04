@@ -61,7 +61,7 @@ def cli_collect():
 @click.option(
     "--clean/--no-clean",
     "clean",
-    default=True,
+    default=False,
     is_flag=True,
     type=bool,
     help="Post-process Redis collections into a cleaned copy filtered to redis-server TGID(s)",
@@ -74,7 +74,6 @@ def cli_collect_data(
     clean: bool,
 ):
     """Run data collection tooling."""
-    # print("config_file", config_file)
     config_overrides = yaml.safe_load(config_file.read_text())
     config = KernmlopsConfig().merge(config_overrides)
     name = (
