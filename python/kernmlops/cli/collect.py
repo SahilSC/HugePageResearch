@@ -139,6 +139,7 @@ def run_collect(
     benchmark: Benchmark,
     verbose: bool,
     collection_prefix: str | None,
+    hugepage_harness: ConfigBase | None = None,
 ):
     if not benchmark.is_configured():
         raise BenchmarkNotConfiguredError(
@@ -149,7 +150,10 @@ def run_collect(
     generic_config = cast(
         data_collection.GenericCollectorConfig, getattr(collector_config, "generic")
     )
-    bpf_programs = generic_config.get_hooks(benchmark=benchmark)
+    bpf_programs = generic_config.get_hooks(
+        benchmark=benchmark,
+        hugepage_harness=hugepage_harness,
+    )
     system_info = data_collection.machine_info().to_polars()
     system_info = system_info.unnest(system_info.columns)
     collection_id = str(uuid.uuid4())

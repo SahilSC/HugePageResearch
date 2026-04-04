@@ -20,12 +20,18 @@ class GenericCollectorConfig(ConfigBase):
     def get_output_dir(self) -> Path:
         return Path(self.output_dir)
 
-    def get_hooks(self, benchmark: Any | None = None) -> list[Any]:
+    def get_hooks(
+        self,
+        benchmark: Any | None = None,
+        hugepage_harness: ConfigBase | None = None,
+    ) -> list[Any]:
         hooks = []
         for hook_name, hook_type in bpf.all_hooks.items():
             if hook_name not in self.hooks:
                 continue
-            if hook_name == "vaptr" and benchmark is not None:
+            if hook_name in ["smaps_harness", "thp_intervention", "vmstat_harness"]:
+                hooks.append(hook_type(hugepage_harness=hugepage_harness))
+            elif hook_name == "vaptr" and benchmark is not None:
                 num_keys = getattr(
                     getattr(benchmark, "config", None), "vaptr_num_keys", 10
                 )
@@ -41,6 +47,14 @@ class GenericCollectorConfig(ConfigBase):
                         key_names=key_names,
                     )
                 )
+            elif hook_name in ["proc_maps", "smaps_hook"]:
+                process_name = "redis-server"
+                redis_server_name = getattr(benchmark, "redis_server_name", None)
+                if callable(redis_server_name):
+                    process_name = redis_server_name()
+                elif benchmark is not None:
+                    process_name = benchmark.name()
+                hooks.append(hook_type(process_name=process_name))
             else:
                 hooks.append(hook_type())
         return hooks

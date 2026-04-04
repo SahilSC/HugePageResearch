@@ -25,13 +25,14 @@ needs a class that follows this protocol.
 `main`. It imports each hook class, builds the `all_hooks` mapping, and exposes
 `hook_names()` so the collector can populate the default hook list.
 
-At the time of this docs batch, the built-in registry includes hooks such as:
+The built-in registry now includes hooks such as:
 
 - file and memory usage tracking
 - process metadata and process trace events
 - quanta runtime and block I/O tracing
 - perf counters
-- huge-page-related hooks such as collapse and smaps-based helpers
+- huge-page-related hooks such as `thp_trace`, `vmstat_harness`,
+  `thp_intervention`, `smaps_harness`, `proc_maps`, and `smaps_hook`
 - zswap runtime tracing
 
 If you want to know which names are enabled by default, compare this registry
@@ -50,6 +51,16 @@ with `collector_config.generic.hooks` in [`defaults.yaml`](../../../../defaults.
 The pattern in this repository is usually "one Python wrapper per hook, plus
 one or more helper sources under `bpf/` when kernel-side instrumentation is
 required."
+
+For the THP harness path, there are two kinds of hooks:
+
+- kernel-facing hooks such as [`thp_trace.py`](./thp_trace.py), which use BCC
+  and the `bpf/` sources to watch huge-page behavior in the kernel
+- userspace samplers such as
+  [`thp_intervention_hook.py`](./thp_intervention_hook.py),
+  [`proc_maps_hook.py`](./proc_maps_hook.py), and
+  [`proc_smaps_hook.py`](./proc_smaps_hook.py), which read `/proc` and debugfs
+  to track Redis mappings and issue split commands
 
 ## How A Hook Gets Used
 
@@ -77,7 +88,6 @@ step-by-step process to extend the mapping.
 
 ## Current Scope On `main`
 
-This directory-level README intentionally documents the hook system that is
-already present on `main`. Later merge batches will add Redis- and
-page-access-specific hooks; those should be documented when the code lands so
-the docs stay synchronized with the actual registry.
+This README documents the hook system that is present on `main` now, including
+the Redis/VAPTR hooks and the THP harness helpers for map sampling and
+intervention.

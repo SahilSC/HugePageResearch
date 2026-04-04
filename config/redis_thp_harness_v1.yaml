@@ -34,21 +34,21 @@ collector_config:
       - perf
       - thp_trace
       - vmstat_harness
-      - smaps_harness
-  hugepage_harness:
+      - thp_intervention
+hugepage_harness:
+  enabled: true
+  redis_name_regex: "redis-server"
+  window_ms: [100, 1000, 10000]
+  intervention_enabled: true
+  intervention_period_s: 10
+  intervention_warmup_s: 30
+  negative_sample_period_s: 2
+  age_bucket_weights: [0.4, 0.4, 0.2]
+  matching_enabled: true
+  matching:
     enabled: true
-    redis_name_regex: "redis-server"
-    window_ms: [100, 1000, 10000]
-    intervention_enabled: true
-    intervention_period_s: 10
-    intervention_warmup_s: 30
-    negative_sample_period_s: 2
-    age_bucket_weights: [0.4, 0.4, 0.2]
-    matching_enabled: true
-    matching:
-      enabled: true
-    vmstat_interval_ms: 200
-    smaps_rollup_interval_ms: 500
-    smaps_vma_interval_ms: 2000
-    split_debugfs_path: "/sys/kernel/debug/split_huge_pages"
-    random_seed: 17
+  vmstat_interval_ms: 200
+  smaps_rollup_interval_ms: 500
+  smaps_vma_interval_ms: 2000
+  split_debugfs_path: "/sys/kernel/debug/split_huge_pages"
+  random_seed: 17

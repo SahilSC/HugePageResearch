@@ -80,6 +80,7 @@ def cli_collect_data(
         benchmark=benchmark,
         verbose=verbose,
         collection_prefix=collection_prefix,
+        hugepage_harness=getattr(config, "hugepage_harness", None),
     )
 
 
