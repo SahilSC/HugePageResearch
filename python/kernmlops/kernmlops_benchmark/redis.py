@@ -160,6 +160,7 @@ class RedisBenchmark(Benchmark):
         if count <= 0:
             return []
 
+        # Track keys from the first load batch so the hook knows the cohort before the run starts.
         max_keys = min(count, self.config.record_count)
         return [self._build_ycsb_key_name(keynum) for keynum in range(max_keys)]
 
@@ -174,6 +175,14 @@ class RedisBenchmark(Benchmark):
             if dump.exists():
                 shutil.move(dump, dump.with_suffix(".rdb.bak"))
 
+        # Kill any existing redis-server on port 6379 (system redis or leftover)
+        subprocess.run(
+            ["redis-cli", "SHUTDOWN", "NOSAVE"],
+            capture_output=True,
+            timeout=5,
+        )
+        time.sleep(1)
+
         # start the redis server
         start_redis = [
             self.redis_server_name(),
@@ -185,6 +194,7 @@ class RedisBenchmark(Benchmark):
         self.server = subprocess.Popen(start_redis)
 
         # Wait for redis
+        time.sleep(1)
         ping_redis = subprocess.run(["redis-cli", "ping"])
         i = 0
         while i < 10 and ping_redis.returncode != 0:

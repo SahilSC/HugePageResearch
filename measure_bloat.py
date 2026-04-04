@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import polars as pl
@@ -92,5 +93,7 @@ plt.ylabel("RSS (MB)")
 plt.title("Redis RSS Usage by THP Policy")
 plt.legend()
 plt.grid(True, alpha=0.3)
-plt.savefig("redis_bloat_comparison.png")
-print("\nGraph saved to: redis_bloat_comparison.png")
+output_path = Path("figures/redis_bloat_comparison.png")
+output_path.parent.mkdir(parents=True, exist_ok=True)
+plt.savefig(output_path)
+print(f"\nGraph saved to: {output_path}")

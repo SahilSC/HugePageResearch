@@ -98,6 +98,7 @@ RUN apt-get update -y \
   bpftrace \
   zsh \
   psmisc \
+  sudo \
   && apt-get clean
 
 RUN ln -s /usr/bin/python3.12 /usr/bin/python
