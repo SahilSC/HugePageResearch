@@ -90,12 +90,21 @@ cd ~/HugePageResearch/redis-module
 make
 ```
 
+The commands in this section are written for the host checkout at
+`~/HugePageResearch`. If you are inside the Docker container started by
+`make docker`, the same repo is mounted at `/KernMLOps`.
+
 Start Redis with the repo config and the `VAPTR` module:
 
 ```bash
 cd ~/HugePageResearch
-redis-server ./config/redis.conf --loadmodule ./redis-module/vaptr.so
+REDIS_BIN="$(command -v redis-server)"
+"$REDIS_BIN" ./config/redis.conf --loadmodule ./redis-module/vaptr.so
 ```
+
+For replay and manual VAPTR smoke runs, do not start Redis as bare
+`redis-server ...`. `replay_trace.py` expects `INFO server.executable` to
+already be a real executable path.
 
 Insert one hash with a 2 MiB field value:
 
@@ -133,6 +142,22 @@ Invoke the syscall:
 ./split_thp_cli "$REDIS_PID" "$ADDR"
 ```
 
+Or invoke the replay-time Python helper that now performs the same
+`INFO server` -> `VAPTR FIELD field0` -> `split_thp` flow used by
+`python/kernmlops/data_collection/replay_trace.py`:
+
+```bash
+cd ~/HugePageResearch
+PYTHONPATH=./python/kernmlops .venv/bin/python - <<'PY'
+import redis
+from data_collection.replay_trace import break_page
+
+client = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
+redis_pid = int(client.info("server")["process_id"])
+print(break_page(client, redis_pid, "user-proof"))
+PY
+```
+
 Check the same mapping again:
 
 ```bash
@@ -145,11 +170,26 @@ What to expect:
   the address is inside a THP
 - after the split, the same mapping should report `anon_huge_pages_kb=0`
 
+Important caveat:
+
+- `mapping_info` reads one `smaps` entry for the whole VMA, not a per-4 KiB
+  page verdict for the exact `VAPTR` address
+- a VMA can report nonzero `anon_huge_pages_kb` even when the specific
+  `VAPTR` address sits outside the split-eligible THP extent
+- in that case `split_thp_cli` can raise `ENOENT`, while the Python
+  `break_page(...)` helper retries and then returns `False`
+
 If the ad hoc 2 MiB insert still does not land inside a THP, use the repo's
 large-value Redis e2e configs instead:
 
 - `config/redis_vaptr_e2e.yaml`
 - `config/redis_vaptr_access_bit_e2e.yaml`
+
+For a more reliable manual smoke, load several 2 MiB keys and try them until
+one returns `True` from `break_page(...)`. In the live Docker validation for
+this repo, the first inserted key shared a VMA with THP-backed pages but was
+not itself inside the split-eligible THP; a later large key in the same run did
+split successfully.
 
 ## Authorization Note
 

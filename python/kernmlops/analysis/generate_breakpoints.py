@@ -1,8 +1,15 @@
-"""Generate breakpoint configurations from a redis-cli monitor log.
+"""Generate replay-time breakpoint configurations from a redis-cli monitor log.
 
-Parses a redis-cli MONITOR log to count per-key accesses, then produces
-a single Parquet file where each row is one breakpoint combination and
-each column is a Redis key.
+Parses a redis-cli MONITOR log to count accesses for Redis keys that are
+valid replay-time split targets, then produces a single Parquet file
+where each row is one breakpoint combination and each column is a YCSB
+user-record key.
+
+The current replay/VAPTR flow breaks only top-level ``user*`` hash keys
+via ``VAPTR FIELD field0 <key>``. Redis bookkeeping commands such as
+``ZREM "_indices" "user123"`` are still replayed later, but
+``_indices`` is not written to the breakpoint parquet because it is not
+itself a valid split target.
 
 Usage::
 
@@ -26,20 +33,43 @@ _LOG_LINE_RE: re.Pattern[str] = re.compile(r"^\d+\.\d+\s+\[.+?\]\s+")
 
 # Extracts all double-quoted tokens from the command portion.
 _QUOTED_TOKEN_RE: re.Pattern[str] = re.compile(r'"((?:[^"\\]|\\.)*)"')
+_REPLAY_SPLIT_TARGET_PREFIX = "user"
+
+
+def _is_replay_split_target(key: str) -> bool:
+    """Return whether *key* is a valid replay-time split target.
+
+    The current replay flow breaks only YCSB user-record hashes. Redis
+    bookkeeping keys such as ``_indices`` still appear in the MONITOR
+    log and are replayed, but they are not valid inputs to
+    ``VAPTR FIELD field0 <key>``.
+
+    Args:
+        key: Primary Redis key from a parsed MONITOR command.
+
+    Returns:
+        ``True`` when *key* names a YCSB user record, else ``False``.
+    """
+    return key.startswith(_REPLAY_SPLIT_TARGET_PREFIX)
 
 
 def parse_log(log_path: Path) -> dict[str, int]:
-    """Parse a redis-cli MONITOR log and count accesses per key.
+    """Parse a redis-cli MONITOR log and count accesses per split target.
 
-    The key is the second quoted token on each line (i.e. the first
-    argument after the command name). Lines that start with ``OK`` or
-    that do not match the timestamp pattern are silently skipped.
+    The parser counts only monitor lines whose primary Redis key is a
+    valid replay-time split target. In this repo that means top-level
+    ``user*`` YCSB record hashes, not bookkeeping keys such as
+    ``_indices``.
+
+    Example output:
+        {"user123": 7, "user456": 2}
 
     Args:
         log_path: Path to the redis-cli monitor log file.
 
     Returns:
-        A mapping ``{key: access_count}`` for every key observed.
+        A mapping ``{key: access_count}`` for every valid split target
+        observed as the primary Redis key in the MONITOR log.
 
     Raises:
         FileNotFoundError: If *log_path* does not exist.
@@ -63,7 +93,8 @@ def parse_log(log_path: Path) -> dict[str, int]:
                 continue
 
             key = tokens[1]
-            counts[key] += 1
+            if _is_replay_split_target(key):
+                counts[key] += 1
 
     return dict(counts)
 
@@ -184,8 +215,9 @@ def generate_combinations(
 def write_parquet(combos: list[dict[str, int]], output_path: Path) -> None:
     """Write breakpoint combinations to a Parquet file.
 
-    Each row represents one combination; each column is a Redis key whose
-    value is the access number at which to break (0 = no break).
+    Each row represents one combination; each column is a replay-time
+    split target whose value is the access number at which to break
+    (0 = no break).
 
     Args:
         combos: List of breakpoint dicts as returned by
@@ -205,7 +237,7 @@ def _print_summary(access_counts: dict[str, int]) -> None:
         access_counts: Per-key access counts.
     """
     if not access_counts:
-        print("No keys found in log.", file=sys.stderr)
+        print("No replay-time split targets found in log.", file=sys.stderr)
         return
 
     total_keys = len(access_counts)
@@ -214,7 +246,7 @@ def _print_summary(access_counts: dict[str, int]) -> None:
     max_accesses = max(access_counts.values())
 
     print(
-        f"Unique keys:      {total_keys}\n"
+        f"Unique split targets: {total_keys}\n"
         f"Total accesses:   {total_accesses}\n"
         f"Min accesses/key: {min_accesses}\n"
         f"Max accesses/key: {max_accesses}",
@@ -225,7 +257,8 @@ def _print_summary(access_counts: dict[str, int]) -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Parse a redis-cli monitor log and generate a Parquet breakpoint file."
+            "Parse a redis-cli monitor log and generate a Parquet file of "
+            "replay-time split targets."
         ),
     )
     parser.add_argument(
@@ -237,7 +270,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         default=Path("data/breakpoints.parquet"),
-        help="Output Parquet file path (default: data/breakpoints.parquet).",
+        help=(
+            "Output Parquet file path for replay-time split targets "
+            "(default: data/breakpoints.parquet)."
+        ),
     )
     parser.add_argument(
         "--max-combos",

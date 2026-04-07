@@ -13,6 +13,7 @@ readonly SERVER_SLEEP=10
 
 readonly REDIS_HOST="127.0.0.1"
 readonly REDIS_PORT=6379
+readonly BENCHMARK_DIR_NAME="kernmlops-benchmark"
 
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly TRACE_BASE_DIR="${SCRIPT_DIR}/../data/redis_traces"
@@ -44,7 +45,8 @@ readonly YCSB_PARAMS
 
 # --- Globals ------------------------------------------------------------------
 
-YCSB_DIR="${SCRIPT_DIR}/../YCSB"
+BENCHMARK_DIR="${BENCHMARK_DIR:-${HOME}/${BENCHMARK_DIR_NAME}}"
+YCSB_DIR="${BENCHMARK_DIR}/ycsb/YCSB"
 MONITOR_PID=""
 
 # --- Helpers ------------------------------------------------------------------
@@ -77,7 +79,7 @@ trap cleanup EXIT ERR INT TERM
 
 usage() {
     echo "Usage: $(basename "$0") [-h] [-d ycsb_dir]"
-    echo "  -d, --ycsb-dir   Path to YCSB directory (default: <repo>/YCSB)"
+    echo "  -d, --ycsb-dir   Path to YCSB directory (default: ${YCSB_DIR})"
 }
 
 while [[ $# -gt 0 ]]; do
@@ -97,6 +99,7 @@ done
 # --- Preflight ----------------------------------------------------------------
 
 [[ -x "${YCSB_DIR}/bin/ycsb" ]] || die "YCSB not found at ${YCSB_DIR}/bin/ycsb"
+
 redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" ping &>/dev/null || die "Cannot reach Redis at ${REDIS_HOST}:${REDIS_PORT}"
 
 # --- Setup --------------------------------------------------------------------
@@ -133,6 +136,7 @@ while true; do
     sleep 1
 done
 sudo cp "${rdb_dir}/${rdb_file}" "${snapshot_rdb}"
+sudo chown "$(id -u):$(id -g)" "${snapshot_rdb}"
 echo "Snapshot saved to ${snapshot_rdb}" >&2
 
 [[ "${EXPLICIT_PURGE}" == "true" ]] && redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" MEMORY PURGE >/dev/null

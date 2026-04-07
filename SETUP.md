@@ -23,13 +23,17 @@ make install-ycsb
 make setup-redis
 ```
 
+```bash
+make -C redis-module
+```
+
 ## 3. Disable ASLR On The Host
 
 Run this on the host machine, not inside the container:
 
 ```bash
-sudo sysctl -w kernel.randomize_va_space=0
-echo "kernel.randomize_va_space = 0" | sudo tee -a /etc/sysctl.conf
+sysctl -w kernel.randomize_va_space=0
+echo "kernel.randomize_va_space = 0" | tee -a /etc/sysctl.conf
 sudo sysctl -p
 ```
 
@@ -143,7 +147,7 @@ uname -r
 ls -l /boot/vmlinuz /boot/initrd.img /lib/modules/6.8.12-splitthp
 ```
 
-`uname -r` should report:
+`uname -r` should report
 
 ```text
 6.8.12-splitthp
@@ -179,14 +183,99 @@ sudo reboot
 
 ## 12. Redis / VAPTR Smoke Path
 
-Once the custom kernel is running, the repo-visible syscall bundle is:
+A smoke test is a quick end-to-end check that the main path basically works.
+Here, it means:
 
-- `kernel-patches/ubuntu-6.8.0-101.101-split_thp.patch`
-- `tests/syscall_verification/`
-- `reports/kernel/`
+- Redis starts successfully
+- the `VAPTR` module is loaded
+- Redis can return a value address for a key
+- the custom `split_thp(pid, vaddr)` syscall can be exercised against that key
 
-For a Redis-targeted smoke test after bring-up, use:
+The commands in this section are written for the host checkout at
+`~/HugePageResearch`. If you are inside the Docker container started by
+`make docker`, the same repo is mounted at `/KernMLOps`.
 
-- `tests/syscall_verification/README.md`
-- `config/redis_vaptr_e2e.yaml`
-- `config/redis_vaptr_access_bit_e2e.yaml`
+Build the Redis module first:
+
+```bash
+cd ~/HugePageResearch/redis-module
+make
+```
+
+Start Redis with the repo config and load `vaptr.so`:
+
+```bash
+cd ~/HugePageResearch
+REDIS_BIN="/tmp/redis-7.4.2/src/redis-server"
+"$REDIS_BIN" ~/HugePageResearch/config/redis.conf \
+  --loadmodule ~/HugePageResearch/redis-module/vaptr.so
+```
+
+Verify that the module is loaded:
+
+```bash
+redis-cli MODULE LIST
+```
+
+The output should include `vaptr`.
+
+Important replay reminder:
+
+If you are using breakpoint-enabled `replay_trace.py`, make sure
+`redis-module/vaptr.so` has already been built. The earlier setup step covers
+that. During replay, the script restarts Redis and adds
+`--loadmodule /abs/path/to/redis-module/vaptr.so` automatically when that file
+exists.
+
+For replay and manual VAPTR smoke runs, do not assume the distro Redis works.
+On this machine, `/usr/bin/redis-server` is `7.0.15` and failed to load
+`redis-module/vaptr.so`. Replay expects `INFO server.executable` to already be
+the exact Redis binary that can load the module, which is why the startup
+command above uses `/tmp/redis-7.4.2/src/redis-server`.
+
+## 13. Redis Trace Capture And Replay
+
+This is the canonical end-to-end workflow:
+
+1. Capture trace artifacts inside the repo Docker container.
+2. Replay on the host against a matching Redis `7.4.2` binary.
+
+Expected capture artifacts:
+
+- `data/redis_traces/snapshot.rdb`
+- `data/redis_traces/monitor_run.log`
+
+### 13.1 Host Prep
+
+```bash
+cd ~/HugePageResearch
+source scripts/setup_prep_env.sh
+make docker
+make install-ycsb
+make setup-redis
+make -C redis-module
+```
+
+### 13.2 Start Redis and Run the Pipeline
+
+Start Redis in the background, then run capture, breakpoints, and replay in order.
+
+```bash
+redis-server ./config/redis.conf &
+./scripts/capture_redis_trace.sh
+python python/kernmlops/analysis/generate_breakpoints.py \
+  data/redis_traces/monitor_run.log \
+  --output data/breakpoints.parquet
+python python/kernmlops/data_collection/replay_trace.py \
+  data/redis_traces/snapshot.rdb \
+  data/redis_traces/monitor_run.log \
+  --breakpoints data/breakpoints.parquet \
+  --output data/results.parquet \
+  --runs 1 -v
+```
+
+### 13.3 Cleanup
+
+```bash
+redis-cli shutdown nosave
+```

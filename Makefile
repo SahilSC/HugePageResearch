@@ -16,7 +16,13 @@ LOWER_UNAME = $(shell echo ${UNAME} | tr A-Z a-z)
 # First ensure the user has not overridden this field
 ifeq (${KERNEL_DEV_HEADERS_DIR}, /usr/src/kernels/${KERNEL_VERSION})
 	ifeq ("$(wildcard ${KERNEL_DEV_HEADERS_DIR})","")
-	    KERNEL_DEV_HEADERS_DIR = /usr/src/linux-headers-${KERNEL_VERSION}
+		ifneq ("$(wildcard /usr/src/linux-headers-${KERNEL_VERSION})","")
+			KERNEL_DEV_HEADERS_DIR = /usr/src/linux-headers-${KERNEL_VERSION}
+		else ifneq ("$(wildcard /lib/modules/${KERNEL_VERSION}/build)","")
+			# Custom kernels may expose usable build headers through the modules
+			# build symlink instead of a /usr/src/linux-headers-* package.
+			KERNEL_DEV_HEADERS_DIR = $(shell readlink -nf /lib/modules/${KERNEL_VERSION}/build)
+		endif
 	endif
 endif
 

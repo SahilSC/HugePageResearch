@@ -85,6 +85,13 @@ make collect
 
 ```
 
+## Redis Replay
+
+If you are setting up a new machine for Redis trace capture and replay, use
+[`SETUP.md`](SETUP.md) as the canonical guide. It documents the validated split
+between container-side capture and host-side replay, including the matching
+host Redis `7.4.2` build needed for `redis-module/vaptr.so`.
+
 ## Capturing Data -> Processing in Python
 
 For this example you need to open two terminals.

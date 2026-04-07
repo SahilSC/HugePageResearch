@@ -2,6 +2,9 @@
 
 Pipeline overview::
 
+We assume that a redis-server is started via
+``redis-server ./config/redis.conf'' before the capture script. 
+
     1. Capture  -- ``scripts/capture_redis_trace.sh``
                    Runs YCSB load, saves an RDB snapshot to
                    ``data/redis_traces/snapshot.rdb``, then records
@@ -12,7 +15,7 @@ Pipeline overview::
                    Parses the monitor log, counts per-key accesses, and writes
                    a Parquet file of breakpoint combinations to
                    ``data/breakpoints.parquet``.
-
+                   
     3. Replay   -- ``python replay_trace.py <snapshot.rdb> <run_log> --breakpoints bp.parquet``
                    For each breakpoint combination in the Parquet file:
                      a. Restore the RDB snapshot (exact key-value layout from load).
@@ -33,7 +36,10 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import ctypes
+import errno
 import logging
+import os
 import re
 import subprocess
 import time
@@ -61,8 +67,11 @@ _MONITOR_LINE_RE: re.Pattern[str] = re.compile(
 # Extracts individual double-quoted tokens (handles backslash escapes).
 _QUOTED_TOKEN_RE: re.Pattern[str] = re.compile(r'"((?:[^"\\]|\\.)*)"')
 
-BREAK_PAGE_MAX_ATTEMPTS: int = 2
 EXECUTE_MAX_ATTEMPTS: int = 2
+BREAK_PAGE_MAX_ATTEMPTS: int = 2
+SPLIT_THP_SYSCALL_NR: int = 462
+VAPTR_FIELD_NAME: str = "field0"
+REDIS_RESTORE_TIMEOUT_S: float = 300.0
 
 _THP_PATH = Path("/sys/kernel/mm/transparent_hugepage/enabled")
 _THP_DEFRAG_PATH = Path("/sys/kernel/mm/transparent_hugepage/defrag")
@@ -74,6 +83,9 @@ _SWAPPINESS_PATH = Path("/proc/sys/vm/swappiness")
 _OVERCOMMIT_PATH = Path("/proc/sys/vm/overcommit_memory")
 _COMPACTION_PROACTIVENESS_PATH = Path("/proc/sys/vm/compaction_proactiveness")
 _KSM_PATH = Path("/sys/kernel/mm/ksm/run")
+
+_LIBC = ctypes.CDLL(None, use_errno=True)
+_LIBC.syscall.restype = ctypes.c_long
 
 
 # ---------------------------------------------------------------------------
@@ -150,25 +162,247 @@ def parse_line(line: str) -> RedisCommand | None:
 
 
 # ---------------------------------------------------------------------------
-# Break-page placeholder
+# Break-page helpers
 # ---------------------------------------------------------------------------
 
 
-def break_page(key: str) -> bool:
-    """Placeholder for future page-fault / memory-pressure logic.
+def _get_redis_pid(client: redis.Redis) -> int:
+    """Return the active Redis server pid.
 
-    This function will eventually cause a page fault on the memory page
-    backing *key*'s data inside Redis. For now it is a no-op stub.
+    This helper expects the standard `INFO server` shape from `redis-py`
+    with `decode_responses=True`.
+
+    Example `INFO server` fragment:
+        {"process_id": 608669, "tcp_port": 6379}
 
     Args:
-        key: The Redis key whose backing page should be broken.
+        client: Active Redis connection to the target server.
 
     Returns:
-        ``False`` unconditionally. A real implementation returns ``True``
-        on success.
+        Redis server process ID.
+
+    Raises:
+        RuntimeError: If Redis does not report a usable process ID.
     """
-    # TODO add syscall and return status
+    info = client.info("server")
+    process_id = info.get("process_id")
+    if not isinstance(process_id, int) or process_id <= 0:
+        raise RuntimeError(
+            f"Redis INFO server did not return a valid process_id: {info!r}"
+        )
+    return process_id
+
+
+
+def _redis_process_exited(pid: int) -> bool:
+    """Return whether *pid* has exited and no longer needs waiting.
+
+    Replay starts Redis in two different ways over its lifetime:
+    the initial Redis process already exists before replay starts, while later
+    restored Redis processes are children of this Python process. A child can
+    therefore be "dead but not yet reaped", which still makes `os.kill(pid, 0)`
+    succeed even though Redis has finished shutting down.
+
+    Example output:
+        True
+
+    Args:
+        pid: Process ID of the Redis server being shut down.
+
+    Returns:
+        `True` when the process is gone or has been reaped, else `False`.
+    """
+    try:
+        waited_pid, _ = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        waited_pid = 0
+
+    if waited_pid == pid:
+        return True
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    except PermissionError:
+        return False
+
     return False
+
+
+def _wait_for_redis_exit(pid: int, timeout: float = 30.0) -> None:
+    """Block until the target Redis process has stopped.
+
+    Args:
+        pid: Process ID of the Redis server being shut down.
+        timeout: Maximum seconds to wait before raising `TimeoutError`.
+
+    Raises:
+        TimeoutError: If Redis still appears alive after *timeout* seconds.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _redis_process_exited(pid):
+            return
+        time.sleep(0.1)
+    raise TimeoutError(f"Redis pid {pid} did not exit after SHUTDOWN")
+
+
+def _resolve_key_vaddr(client: redis.Redis, key: str) -> int:
+    """Return the value address that `VAPTR` reports for one Redis key.
+
+    This script assumes the `capture_redis_trace.sh` workload shape:
+    exactly one YCSB field per key, so the only supported VAPTR lookup here is
+    `FIELD field0`.
+
+    Expected VAPTR reply for one key:
+        [["user-proof", "0x7fffef580009"]]
+
+    Args:
+        client: Active Redis connection with `decode_responses=True`.
+        key: Redis key whose `field0` value should be resolved.
+
+    Returns:
+        Virtual address of that value as an integer.
+
+    Raises:
+        RuntimeError: If VAPTR is unavailable or returns an unexpected shape.
+    """
+    reply = client.execute_command("VAPTR", "FIELD", VAPTR_FIELD_NAME, key)
+    try:
+        reply_key, reply_vaddr = reply[0]
+    except (IndexError, TypeError, ValueError) as exc:
+        raise RuntimeError(
+            f"VAPTR returned an unexpected reply for key {key!r}: {reply!r}"
+        ) from exc
+
+    if reply_key != key:
+        raise RuntimeError(
+            f"VAPTR returned key {reply_key!r} while resolving {key!r}: {reply!r}"
+        )
+    if reply_vaddr == "(nil)":
+        raise RuntimeError(
+            f"VAPTR did not resolve a direct pointer for key {key!r} field {VAPTR_FIELD_NAME!r}"
+        )
+
+    try:
+        return int(reply_vaddr, 16)
+    except ValueError as exc:
+        raise RuntimeError(
+            f"VAPTR returned a malformed address for key {key!r}: {reply_vaddr!r}"
+        ) from exc
+
+
+def _invoke_split_thp_syscall(pid: int, vaddr: int) -> None:
+    """Invoke the custom `split_thp(pid, vaddr)` syscall.
+
+    Args:
+        pid: Target Redis process ID.
+        vaddr: Virtual address inside the THP to split.
+
+    Raises:
+        OSError: If the kernel rejects the syscall.
+    """
+    ctypes.set_errno(0)
+    rc = _LIBC.syscall(
+        ctypes.c_long(SPLIT_THP_SYSCALL_NR),
+        ctypes.c_long(pid),
+        ctypes.c_ulong(vaddr),
+    )
+    if rc == 0:
+        return
+
+    err = ctypes.get_errno() or errno.EIO
+    raise OSError(err, os.strerror(err))
+
+
+def break_page(client: redis.Redis, redis_pid: int, key: str) -> bool:
+    """Resolve one Redis key and try to split the THP holding its value.
+
+    This helper assumes the replay workload shape from
+    ``capture_redis_trace.sh``: each Redis hash has exactly one YCSB value
+    field, so the only supported lookup here is ``VAPTR FIELD field0 <key>``.
+
+    Example result:
+        True
+
+    Args:
+        client: Active Redis connection with ``decode_responses=True``.
+        redis_pid: Process ID of the live Redis server being targeted.
+        key: Redis key whose ``field0`` value should be split out of its THP.
+
+    Returns:
+        ``True`` when the split syscall succeeds, or ``False`` after
+        ``BREAK_PAGE_MAX_ATTEMPTS`` failed syscall attempts.
+
+    Raises:
+        RuntimeError: If Redis metadata or VAPTR resolution is not usable.
+    """
+    vaddr, error = _break_page_for_pid(client, redis_pid, key)
+    if error is not None:
+        logger.warning(
+            "break_page: split_thp(pid=%d, vaddr=0x%x) failed for key %r after %d attempts: errno=%d (%s)",
+            redis_pid,
+            vaddr,
+            key,
+            BREAK_PAGE_MAX_ATTEMPTS,
+            error.errno,
+            error.strerror,
+        )
+        return False
+
+    return True
+
+
+def _break_page_for_pid(
+    client: redis.Redis,
+    redis_pid: int,
+    key: str,
+) -> tuple[int, OSError | None]:
+    """Resolve one Redis key and retry the split syscall for its value address.
+
+    This resolves ``field0`` exactly once, then retries only the
+    ``split_thp(pid, vaddr)`` syscall. Redis/VAPTR problems are still treated
+    as configuration errors and raised immediately.
+
+    Example result:
+        (0x7fffef580009, None)
+
+    Args:
+        client: Active Redis connection with ``decode_responses=True``.
+        redis_pid: Cached process ID of the Redis server for this replay run.
+        key: Redis key whose ``field0`` value should be split.
+
+    Returns:
+        A pair ``(vaddr, error)`` where ``error`` is ``None`` on success or
+        the final ``OSError`` after ``BREAK_PAGE_MAX_ATTEMPTS`` failed syscall
+        attempts.
+
+    Raises:
+        RuntimeError: If VAPTR does not resolve a usable address.
+    """
+    vaddr = _resolve_key_vaddr(client, key)
+    last_error: OSError | None = None
+
+    for attempt in range(1, BREAK_PAGE_MAX_ATTEMPTS + 1):
+        try:
+            _invoke_split_thp_syscall(redis_pid, vaddr)
+            return vaddr, None
+        except OSError as exc:
+            last_error = exc
+            if attempt < BREAK_PAGE_MAX_ATTEMPTS:
+                logger.info(
+                    "break_page: retrying split_thp(pid=%d, vaddr=0x%x) for key %r after attempt %d/%d failed: errno=%d (%s)",
+                    redis_pid,
+                    vaddr,
+                    key,
+                    attempt,
+                    BREAK_PAGE_MAX_ATTEMPTS,
+                    exc.errno,
+                    exc.strerror,
+                )
+
+    return vaddr, last_error
 
 
 # ---------------------------------------------------------------------------
@@ -292,21 +526,38 @@ def _wait_for_redis(client: redis.Redis, timeout: float = 30.0) -> None:
 def restore_snapshot(client: redis.Redis, snapshot_path: Path) -> None:
     """Restore Redis to the state captured in an RDB snapshot.
 
-    Copies *snapshot_path* over Redis's configured RDB file using ``sudo``,
-    then restarts the Redis service so it loads from that file on startup.
-    Blocks until Redis is reachable again before returning.
+    Copies *snapshot_path* to ``dump.rdb`` in the current directory, stops the
+    active Redis process, and restarts with ``redis-server ./config/redis.conf``.
 
     Args:
         client: An active Redis connection.
         snapshot_path: Path to the ``snapshot.rdb`` file produced by
             ``capture_redis_trace.sh``.
     """
+    pid = _get_redis_pid(client)
     rdb_dir = client.config_get("dir")["dir"]
     rdb_file = client.config_get("dbfilename")["dbfilename"]
     rdb_path = Path(rdb_dir) / rdb_file
-    subprocess.run(["sudo", "cp", str(snapshot_path), str(rdb_path)], check=True)
-    subprocess.run(["sudo", "systemctl", "restart", "redis"], check=True)
-    _wait_for_redis(client)
+    subprocess.run(["sudo", "cp", str(snapshot_path), rdb_path], check=True)
+    try:
+        client.execute_command("SHUTDOWN", "NOSAVE")
+    except redis.ConnectionError:
+        pass
+
+    _wait_for_redis_exit(pid)
+
+    start_redis = ["redis-server", "./config/redis.conf", "--dir", rdb_dir, "--dbfilename", rdb_file]
+    vaptr_module = Path("redis-module/vaptr.so")
+    if vaptr_module.exists():
+        start_redis += ["--loadmodule", str(vaptr_module.resolve())]
+
+    subprocess.Popen(
+        start_redis,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    _wait_for_redis(client, timeout=REDIS_RESTORE_TIMEOUT_S)
 
 
 # ---------------------------------------------------------------------------
@@ -316,14 +567,14 @@ def restore_snapshot(client: redis.Redis, snapshot_path: Path) -> None:
 
 def replay(
     trace_path: Path,
-    client: redis.Redis | None,
+    client: redis.Redis,
     breakpoints: dict[str, int] | None = None,
 ) -> int:
     """Replay a redis-cli MONITOR log against a live Redis instance.
 
     Args:
         trace_path: Path to the redis-cli monitor log file.
-        client: Active Redis connection, or ``None`` for a dry run.
+        client: Active Redis connection to the server being replayed.
         breakpoints: Optional ``{key: access_num}`` mapping. ``None``
             disables breakpoint checking.
 
@@ -332,6 +583,8 @@ def replay(
     """
     if breakpoints is None:
         breakpoints = {}
+
+    redis_pid = _get_redis_pid(client)
 
     access_counts: Counter[str] = Counter()
 
@@ -346,7 +599,13 @@ def replay(
             # --- Breakpoint check (fires before the N-th access) ----------
             if key and key in breakpoints:
                 if access_counts[key] == breakpoints[key]:
-                    _invoke_break_page(key, line_no, breakpoints[key])
+                    _invoke_break_page(
+                        client,
+                        redis_pid,
+                        key,
+                        line_no,
+                        breakpoints[key],
+                    )
 
             # --- Execute against Redis ------------------------------------
             if _execute(client, cmd, line_no) and key:
@@ -360,47 +619,55 @@ def replay(
 # ---------------------------------------------------------------------------
 
 
-def _invoke_break_page(key: str, line_no: int, breakpoint: int) -> None:
-    """Call ``break_page`` with retry logic.
-
-    Retries up to ``BREAK_PAGE_MAX_ATTEMPTS`` times total. Prints a
-    warning to stderr if all attempts fail.
+def _invoke_break_page(
+    client: redis.Redis,
+    redis_pid: int,
+    key: str,
+    line_no: int,
+    breakpoint: int,
+) -> None:
+    """Invoke the replay-time THP split for one key.
 
     Args:
+        client: Active Redis connection to the server being replayed.
+        redis_pid: Cached Redis process ID for this replay run.
         key: The Redis key to break.
         line_no: Current line number in the trace (for diagnostics).
         breakpoint: The access number at which the break was triggered.
+
+    Raises:
+        RuntimeError: If VAPTR resolution fails.
     """
-    for _ in range(BREAK_PAGE_MAX_ATTEMPTS):
-        if break_page(key):
-            return
-
-    logger.warning(
-        "line %d: break_page failed for key '%s' at access %d after %d attempts; continuing.",
-        line_no,
-        key,
-        breakpoint,
-        BREAK_PAGE_MAX_ATTEMPTS,
-    )
-
+    vaddr, error = _break_page_for_pid(client, redis_pid, key)
+    if error is not None:
+        logger.warning(
+            "line %d: break_page failed for key '%s' at access %d after %d attempts: pid=%d vaddr=0x%x errno=%d (%s)",
+            line_no,
+            key,
+            breakpoint,
+            BREAK_PAGE_MAX_ATTEMPTS,
+            redis_pid,
+            vaddr,
+            error.errno,
+            error.strerror,
+        )
+        return
 
 def _execute(
-    client: redis.Redis | None,
+    client: redis.Redis,
     cmd: RedisCommand,
     line_no: int,
 ) -> bool:
     """Execute a single Redis command, retrying once on failure.
 
     Args:
-        client: An active ``redis.Redis`` connection, or ``None`` for dry run.
+        client: Active Redis connection to the server being replayed.
         cmd: The parsed command to execute.
         line_no: Current line number in the trace (for diagnostics).
 
     Returns:
-        ``True`` if the command succeeded (or dry-run), ``False`` otherwise.
+        ``True`` if the command succeeded, ``False`` otherwise.
     """
-    if client is None:
-        return True
 
     for attempt in range(EXECUTE_MAX_ATTEMPTS):
         try:
@@ -452,7 +719,7 @@ def run_benchmark(
         output: Destination Parquet file for results.
         runs: Number of times to replay each breakpoint combination.
     """
-    client = redis.Redis(host=host, port=port)
+    client = redis.Redis(host=host, port=port, decode_responses=True)
 
     results: list[dict] = []
     n_combos = len(breakpoints_df)
@@ -486,7 +753,11 @@ def run_benchmark(
                     runs,
                 )
                 t0 = time.perf_counter()
-                total_cmds = replay(run_trace, client, breakpoints=breakpoints)
+                total_cmds = replay(
+                    run_trace,
+                    client,
+                    breakpoints=breakpoints,
+                )
                 runtime_s = time.perf_counter() - t0
 
                 logger.info(
@@ -547,7 +818,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--breakpoints",
         type=Path,
-        default=None,
+        default=Path("data/breakpoints.parquet"),
         help="Path to breakpoints Parquet file (from generate_breakpoints.py). "
         "If omitted, runs once with no breakpoints.",
     )
