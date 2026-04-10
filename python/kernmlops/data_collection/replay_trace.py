@@ -557,6 +557,7 @@ def restore_snapshot(client: redis.Redis, snapshot_path: Path) -> None:
     if vaptr_module.exists():
         start_redis += ["--loadmodule", str(vaptr_module.resolve())]
 
+    logger.info("Starting Redis: %s", " ".join(start_redis))
     subprocess.Popen(
         start_redis,
         stdout=subprocess.DEVNULL,
@@ -575,7 +576,7 @@ def replay(
     trace_path: Path,
     client: redis.Redis,
     breakpoints: dict[str, int] | None = None,
-) -> int:
+) -> tuple[int, int, int]:
     """Replay a redis-cli MONITOR log against a live Redis instance.
 
     Args:
@@ -585,7 +586,10 @@ def replay(
             disables breakpoint checking.
 
     Returns:
-        Total number of commands replayed.
+        A tuple ``(total_cmds, break_success, break_failed)`` where
+        ``total_cmds`` is the number of commands replayed, ``break_success``
+        is the number of successful page breaks, and ``break_failed`` is the
+        number of failed page breaks.
     """
     if breakpoints is None:
         breakpoints = {}
@@ -593,6 +597,16 @@ def replay(
     redis_pid = _get_redis_pid(client)
 
     access_counts: Counter[str] = Counter()
+    break_success = 0
+    break_failed = 0
+
+    # --- Pre-replay breaks for keys with breakpoint == -1 -----------------
+    pre_break_keys = [k for k, v in breakpoints.items() if v == -1]
+    for key in pre_break_keys:
+        if break_page(client, redis_pid, key):
+            break_success += 1
+        else:
+            break_failed += 1
 
     with open(trace_path, encoding="utf-8") as fh:
         for line_no, raw_line in enumerate(fh, start=1):
@@ -603,21 +617,18 @@ def replay(
             key = cmd.key
 
             # --- Breakpoint check (fires before the N-th access) ----------
-            if key and key in breakpoints:
+            if key and key in breakpoints and breakpoints[key] != -1:
                 if access_counts[key] == breakpoints[key]:
-                    _invoke_break_page(
-                        client,
-                        redis_pid,
-                        key,
-                        line_no,
-                        breakpoints[key],
-                    )
+                    if break_page(client, redis_pid, key):
+                        break_success += 1
+                    else:
+                        break_failed += 1
 
             # --- Execute against Redis ------------------------------------
             if _execute(client, cmd, line_no) and key:
                 access_counts[key] += 1
 
-    return sum(access_counts.values())
+    return sum(access_counts.values()), break_success, break_failed
 
 
 # ---------------------------------------------------------------------------
@@ -759,7 +770,7 @@ def run_benchmark(
                     runs,
                 )
                 t0 = time.perf_counter()
-                total_cmds = replay(
+                total_cmds, break_success, break_failed = replay(
                     run_trace,
                     client,
                     breakpoints=breakpoints,
@@ -767,13 +778,16 @@ def run_benchmark(
                 runtime_s = time.perf_counter() - t0
 
                 logger.info(
-                    "[%d/%d run %d/%d] Done — %d commands in %.3fs",
+                    "[%d/%d run %d/%d] Done — %d commands in %.3fs"
+                    " | page breaks: %d succeeded, %d failed",
                     idx + 1,
                     n_combos,
                     run,
                     runs,
                     total_cmds,
                     runtime_s,
+                    break_success,
+                    break_failed,
                 )
                 row_result[f"runtime_s_{run}"] = runtime_s
 
