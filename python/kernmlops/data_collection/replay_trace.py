@@ -3,19 +3,23 @@
 Pipeline overview::
 
 We assume that a redis-server is started via
-``redis-server ./config/redis.conf'' before the capture script. 
+``redis-server ./config/redis.conf'' before the capture script.
 
     1. Capture  -- ``scripts/capture_redis_trace.sh``
                    Runs YCSB load, saves an RDB snapshot to
                    ``data/redis_traces/snapshot.rdb``, then records
                    ``redis-cli monitor`` output for the run phase to
-                   ``data/redis_traces/monitor_run.log``.
+                   ``data/redis_traces/monitor_run.log``.  Also writes
+                   ``data/redis_traces/keys.txt`` listing every key loaded.
 
-    2. Generate -- ``python generate_breakpoints.py <monitor_run_log>``
+    2. Generate -- ``python generate_breakpoints.py <monitor_run_log> [--keys keys.txt]``
                    Parses the monitor log, counts per-key accesses, and writes
                    a Parquet file of breakpoint combinations to
-                   ``data/breakpoints.parquet``.
-                   
+                   ``data/breakpoints.parquet``.  When ``--keys`` is supplied,
+                   keys that appear in ``keys.txt`` but were never accessed
+                   during the run phase are included with an access count of 0;
+                   they receive a breakpoint value of ``-1`` (pre-replay break).
+
     3. Replay   -- ``python replay_trace.py <snapshot.rdb> <run_log> --breakpoints bp.parquet``
                    For each breakpoint combination in the Parquet file:
                      a. Restore the RDB snapshot (exact key-value layout from load).

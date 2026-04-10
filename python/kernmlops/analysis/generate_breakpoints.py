@@ -271,6 +271,16 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to the redis-cli monitor log file.",
     )
     parser.add_argument(
+        "--keys",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path to keys.txt produced by capture_redis_trace.sh. "
+            "Keys present here but absent from the monitor log are included "
+            "with an access count of 0."
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path("data/breakpoints.parquet"),
@@ -301,6 +311,14 @@ def main(argv: list[str] | None = None) -> None:
     output_path: Path = args.output
 
     access_counts = parse_log(log_path)
+
+    if args.keys is not None:
+        with open(args.keys, encoding="utf-8") as fh:
+            for line in fh:
+                key = line.strip()
+                if key and key not in access_counts:
+                    access_counts[key] = 0
+
     _print_summary(access_counts)
 
     combos = generate_combinations(access_counts, max_combos=args.max_combos)

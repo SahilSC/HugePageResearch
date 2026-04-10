@@ -139,6 +139,11 @@ sudo cp "${rdb_dir}/${rdb_file}" "${snapshot_rdb}"
 sudo chown "$(id -u):$(id -g)" "${snapshot_rdb}"
 echo "Snapshot saved to ${snapshot_rdb}" >&2
 
+keys_file="${output_dir}/keys.txt"
+redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" --no-auth-warning \
+    KEYS 'user*' | sort >"${keys_file}"
+echo "Keys dumped to ${keys_file}" >&2
+
 [[ "${EXPLICIT_PURGE}" == "true" ]] && redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" MEMORY PURGE >/dev/null
 
 # --- Run phase ----------------------------------------------------------------
