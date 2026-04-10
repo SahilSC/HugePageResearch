@@ -458,7 +458,13 @@ def setup_system() -> SystemConfig:
         _sysfs_write(_COMPACTION_PROACTIVENESS_PATH, "0")
     if config.ksm_run is not None:
         _sysfs_write(_KSM_PATH, "0")
-    logger.info("System configuration applied.")
+    logger.info(
+        "System configuration applied: "
+        "thp=always, thp_defrag=never, khugepaged_scan_sleep_ms=4294967295, "
+        "numa_balancing=0, swappiness=0, overcommit_memory=1%s%s",
+        ", compaction_proactiveness=0" if config.compaction_proactiveness is not None else "",
+        ", ksm_run=0" if config.ksm_run is not None else "",
+    )
 
     return config
 
