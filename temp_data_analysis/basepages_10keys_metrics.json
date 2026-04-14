@@ -1,0 +1,13 @@
+{
+  "results_path": "/users/SahilSC/HugePageResearch/data/test3_basepages_results_10keys_12rows.parquet",
+  "rows": 12,
+  "base_pages_runtime_s": 18.272981512981158,
+  "no_break_runtime_s": 17.796416293364018,
+  "base_pages_pct_vs_no_break": 2.677871835324752,
+  "split_rows": 10,
+  "split_rows_slower_than_no_break": 5,
+  "split_rows_faster_than_no_break": 5,
+  "split_mean_delta_s": 0.17620209797751157,
+  "split_mean_delta_pct": 0.9900987652396864,
+  "corr_access_vs_runtime_pct": 0.8666497755924178
+}

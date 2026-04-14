@@ -100,7 +100,12 @@ class Benchmark(Protocol):
 
     def setup(self) -> None: ...
 
-    def run(self) -> None: ...
+    def run(
+        self,
+        *,
+        run_dir: Path | None = None,
+        config_text: str | None = None,
+    ) -> None: ...
 
     def poll(self) -> int | None:
         """Returns None when benchmark is running, nonzero when crashed."""
@@ -145,7 +150,12 @@ class FauxBenchmark(Benchmark):
     def setup(self) -> None:
         self.generic_config.generic_setup()
 
-    def run(self) -> None:
+    def run(
+        self,
+        *,
+        run_dir: Path | None = None,
+        config_text: str | None = None,
+    ) -> None:
         print("\nHit Ctrl+C to terminate...")
 
     def poll(self) -> int | None:

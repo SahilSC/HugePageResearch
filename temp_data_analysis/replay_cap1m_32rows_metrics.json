@@ -1,0 +1,15 @@
+{
+  "results_path": "/users/SahilSC/HugePageResearch/data/replay_cap1m_results_32rows.parquet",
+  "rows": 32,
+  "base_pages_runtime_s": 45.95004996661252,
+  "no_break_runtime_s": 45.18374816436941,
+  "base_pages_pct_vs_no_break": 1.6959677613628932,
+  "split_rows": 30,
+  "split_rows_slower_than_no_break": 10,
+  "split_rows_faster_than_no_break": 20,
+  "split_mean_delta_s": -0.226660477188931,
+  "split_mean_delta_pct": -0.5016415999053158,
+  "corr_access_vs_runtime_pct": 0.1157176139053453,
+  "max_runtime_s": 56.37452111009043,
+  "min_runtime_s": 40.704628546955064
+}

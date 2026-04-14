@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>End-Only 10-Key Rerun Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a1220;
+    --bg-accent: #11243d;
+    --card: rgba(10, 22, 39, 0.82);
+    --card-strong: rgba(15, 34, 60, 0.95);
+    --border: rgba(135, 178, 255, 0.16);
+    --text: #edf4ff;
+    --muted: #9eb0c9;
+    --blue: #79a8ff;
+    --teal: #5fd1b3;
+    --gold: #ffbf66;
+    --red: #ff6c7d;
+    --pink: #f48fb1;
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(121, 168, 255, 0.18), transparent 30%),
+      radial-gradient(circle at top right, rgba(95, 209, 179, 0.14), transparent 28%),
+      linear-gradient(180deg, #0b1423 0%, #09111d 60%, #07101a 100%);
+    padding: 28px 20px 36px;
+  }
+
+  .page {
+    max-width: 1360px;
+    margin: 0 auto;
+  }
+
+  header {
+    margin-bottom: 24px;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(121, 168, 255, 0.12);
+    border: 1px solid rgba(121, 168, 255, 0.16);
+    color: #cfe0ff;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  header h1 {
+    margin: 14px 0 10px;
+    font-size: clamp(2rem, 4vw, 3.4rem);
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+  }
+
+  header p {
+    margin: 0;
+    max-width: 920px;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .notice {
+    margin-top: 14px;
+    display: inline-block;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255, 191, 102, 0.09);
+    border: 1px solid rgba(255, 191, 102, 0.16);
+    color: #ffe4bb;
+    font-size: 0.88rem;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+
+  .stat {
+    background: linear-gradient(180deg, rgba(17, 36, 61, 0.96), rgba(10, 22, 39, 0.96));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+
+  .stat .label {
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .stat .value {
+    margin-top: 10px;
+    font-size: clamp(1.7rem, 3vw, 2.45rem);
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+
+  .stat .detail {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .card {
+    grid-column: span 6;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 20px 20px 18px;
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow);
+  }
+
+  .card.wide {
+    grid-column: 1 / -1;
+  }
+
+  .card h2 {
+    margin: 0 0 8px;
+    font-size: 1.18rem;
+    line-height: 1.25;
+  }
+
+  .card .desc {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 0.93rem;
+    line-height: 1.58;
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 360px;
+  }
+
+  .chart-wrap.tall {
+    height: 460px;
+  }
+
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .story-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .story {
+    background: rgba(17, 36, 61, 0.72);
+    border: 1px solid rgba(135, 178, 255, 0.12);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+
+  .story strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #ffffff;
+    font-size: 0.96rem;
+  }
+
+  .story p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+  }
+
+  th,
+  td {
+    padding: 12px 10px;
+    border-bottom: 1px solid rgba(135, 178, 255, 0.1);
+    vertical-align: top;
+    text-align: left;
+  }
+
+  th {
+    color: #d8e6ff;
+    font-size: 0.84rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  td {
+    color: var(--muted);
+  }
+
+  tbody tr:hover {
+    background: rgba(121, 168, 255, 0.05);
+  }
+
+  .mono {
+    font-family: "SFMono-Regular", ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.84rem;
+    color: #dfe9ff;
+    word-break: break-all;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+
+  .chip.red {
+    color: #ffdbe0;
+    background: rgba(255, 108, 125, 0.13);
+  }
+
+  .chip.teal {
+    color: #d9fff4;
+    background: rgba(95, 209, 179, 0.13);
+  }
+
+  .chip.blue {
+    color: #dce8ff;
+    background: rgba(121, 168, 255, 0.14);
+  }
+
+  .error-msg {
+    margin-top: 8px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 108, 125, 0.1);
+    border: 1px solid rgba(255, 108, 125, 0.22);
+    color: #ffdbe0;
+    font-size: 0.92rem;
+  }
+
+  @media (max-width: 1120px) {
+    .stats {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .card {
+      grid-column: 1 / -1;
+    }
+  }
+
+  @media (max-width: 720px) {
+    body {
+      padding: 18px 14px 26px;
+    }
+
+    .stats,
+    .story-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .chart-wrap,
+    .chart-wrap.tall {
+      height: 320px;
+    }
+
+    th,
+    td {
+      padding: 10px 8px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="eyebrow">Redis THP rerun · end-only polling · 10 hot keys</div>
+    <h1>Focused dashboard for the new 12-row rerun</h1>
+    <p>
+      This page only explores the end-only dTLB rerun stored in
+      <code>data/test2_endpoll_results_10keys_12rows.parquet</code>.
+      It keeps the baseline pair (<code>all_break</code> and <code>no_break</code>)
+      plus the top 10 split-only hot-key rows, so the story stays tight:
+      does splitting hot pages noticeably hurt Redis, and does the hottest key
+      automatically cause the worst runtime regression?
+    </p>
+    <div class="notice">
+      Open this page through a local web server from the repo root, for example:
+      <code>python -m http.server</code>
+    </div>
+  </header>
+
+  <section class="stats" id="statsGrid">
+    <div class="stat">
+      <div class="label">No-break mean runtime</div>
+      <div class="value" id="noBreakValue">-</div>
+      <div class="detail">Reference row where every THP stays intact.</div>
+    </div>
+    <div class="stat">
+      <div class="label">All-break mean runtime</div>
+      <div class="value" id="allBreakValue">-</div>
+      <div class="detail" id="allBreakDetail">-</div>
+    </div>
+    <div class="stat">
+      <div class="label">Split-only rows slower</div>
+      <div class="value" id="slowerRowsValue">-</div>
+      <div class="detail">How often a single hot-key split lost against <code>no_break</code>.</div>
+    </div>
+    <div class="stat">
+      <div class="label">Access-count correlation</div>
+      <div class="value" id="corrValue">-</div>
+      <div class="detail">Relationship between key hotness and runtime delta versus <code>no_break</code>.</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <article class="card wide">
+      <h2>Runtime delta versus no_break</h2>
+      <p class="desc">
+        Every bar is one row from the new rerun. The zero line is
+        <code>no_break</code>. Positive bars are slower than the intact-huge-page
+        baseline, and negative bars are faster. This is the quickest way to see
+        whether the penalty comes from splitting everything, splitting one key,
+        or both. The plotted value is percent difference from
+        <code>no_break</code>, not raw seconds.
+      </p>
+      <div class="chart-wrap tall"><canvas id="runtimeDeltaChart"></canvas></div>
+      <div id="runtimeDeltaError"></div>
+    </article>
+
+    <article class="card">
+      <h2>Hotness versus runtime impact</h2>
+      <p class="desc">
+        The 10 split-only rows only. The x-axis is the access count from the
+        captured trace, and the y-axis is the runtime delta versus
+        <code>no_break</code> in percent. Bubble size reflects dTLB misses so
+        you can see whether the slowest keys are also the keys with the biggest
+        TLB pressure.
+      </p>
+      <div class="chart-wrap"><canvas id="scatterChart"></canvas></div>
+      <div id="scatterError"></div>
+    </article>
+
+    <article class="card">
+      <h2>dTLB counters by row</h2>
+      <p class="desc">
+        Mean dTLB loads and misses for each row in this rerun. These are the new
+        metrics added to replay output. They help answer whether a slower row is
+        also carrying more translation overhead.
+      </p>
+      <div class="chart-wrap"><canvas id="dtlbChart"></canvas></div>
+      <div id="dtlbError"></div>
+    </article>
+
+    <article class="card wide">
+      <h2>What stands out in this rerun</h2>
+      <p class="desc">
+        These callouts are generated from the new rerun only. They are meant to
+        mirror the "mean dashboard" interpretation layer, but in a tighter
+        single-run format.
+      </p>
+      <div class="story-grid" id="storyGrid"></div>
+    </article>
+
+    <article class="card wide">
+      <h2>Row details</h2>
+      <p class="desc">
+        Full row mapping for the 10-key rerun. This keeps the short labels
+        readable in the charts while preserving the exact key names and metrics.
+      </p>
+      <div id="tableWrap"></div>
+    </article>
+  </section>
+</div>
+
+<script>
+Chart.defaults.color = '#9eb0c9';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.08)';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+const zeroReferenceLine = {
+  id: 'zeroReferenceLine',
+  afterDraw(chart, _args, options) {
+    const scaleId = options?.scaleId;
+    const scale = chart.scales[scaleId];
+    if (!scale || scale.min > 0 || scale.max < 0) {
+      return;
+    }
+    const pixel = scale.getPixelForValue(0);
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(chartArea.left, pixel);
+    ctx.lineTo(chartArea.right, pixel);
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+async function loadJSON(path) {
+  const response = await fetch(path);
+  if (!response.ok) {
+    throw new Error(`Failed to load ${path} (${response.status})`);
+  }
+  return response.json();
+}
+
+function formatSeconds(value) {
+  return `${value.toFixed(3)}s`;
+}
+
+function formatSignedSeconds(value) {
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(3)}s`;
+}
+
+function formatPercent(value) {
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(1)}%`;
+}
+
+function percentDeltaFromNoBreak(runtimeMean, noBreakRuntime) {
+  return ((runtimeMean / noBreakRuntime) - 1) * 100;
+}
+
+function compactNumber(value) {
+  if (value == null || Number.isNaN(value)) {
+    return 'N/A';
+  }
+  if (Math.abs(value) >= 1e9) {
+    return `${(value / 1e9).toFixed(1)}B`;
+  }
+  if (Math.abs(value) >= 1e6) {
+    return `${(value / 1e6).toFixed(1)}M`;
+  }
+  if (Math.abs(value) >= 1e3) {
+    return `${(value / 1e3).toFixed(1)}K`;
+  }
+  return `${value}`;
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+function showError(id, message) {
+  document.getElementById(id).innerHTML = `<div class="error-msg">${escapeHtml(message)}</div>`;
+}
+
+function buildRuntimeChart(rows, noBreakRuntime) {
+  const ctx = document.getElementById('runtimeDeltaChart').getContext('2d');
+  const labels = rows.map((row) => row.short_label);
+  const colors = rows.map((row) => {
+    if (row.row_type === 'all_break') {
+      return 'rgba(255, 108, 125, 0.72)';
+    }
+    if (row.row_type === 'no_break') {
+      return 'rgba(121, 168, 255, 0.72)';
+    }
+    return row.runtime_delta_vs_no_break > 0
+      ? 'rgba(255, 191, 102, 0.72)'
+      : 'rgba(95, 209, 179, 0.72)';
+  });
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Runtime delta vs no_break (%)',
+        data: rows.map((row) => percentDeltaFromNoBreak(row.runtime_mean, noBreakRuntime)),
+        backgroundColor: colors,
+        borderColor: colors.map((color) => color.replace('0.72', '1')),
+        borderWidth: 1.2,
+        borderRadius: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        zeroReferenceLine: { scaleId: 'y' },
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title(items) {
+              return items[0].label;
+            },
+            afterLabel(context) {
+              const row = rows[context.dataIndex];
+              const percentDelta = percentDeltaFromNoBreak(row.runtime_mean, noBreakRuntime);
+              const lines = [
+                `Mean runtime: ${formatSeconds(row.runtime_mean)}`,
+                `Delta vs no_break: ${formatPercent(percentDelta)}`,
+                `Delta vs no_break: ${formatSignedSeconds(row.runtime_delta_vs_no_break)}`,
+              ];
+              if (row.access_count != null) {
+                lines.push(`Access count: ${row.access_count}`);
+              }
+              if (row.key) {
+                lines.push(`Key: ${row.key}`);
+              }
+              return lines;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          title: { display: true, text: 'Delta versus no_break (%)' }
+        },
+        x: {
+          title: { display: true, text: 'Rows in this rerun' }
+        }
+      }
+    },
+    plugins: [zeroReferenceLine]
+  });
+}
+
+function buildScatterChart(rows, noBreakRuntime) {
+  const splitRows = rows.filter((row) => row.row_type === 'split_only');
+  const ctx = document.getElementById('scatterChart').getContext('2d');
+
+  new Chart(ctx, {
+    type: 'bubble',
+    data: {
+      datasets: [{
+        label: 'Split-only rows',
+        data: splitRows.map((row) => ({
+          x: row.access_count,
+          y: percentDeltaFromNoBreak(row.runtime_mean, noBreakRuntime),
+          r: Math.max(7, Math.min(22, row.dtlb_misses_mean / 25000000)),
+          label: row.short_label,
+          key: row.key,
+          misses: row.dtlb_misses_mean,
+          deltaSeconds: row.runtime_delta_vs_no_break,
+        })),
+        backgroundColor: 'rgba(121, 168, 255, 0.35)',
+        borderColor: 'rgba(121, 168, 255, 0.95)',
+        borderWidth: 1.5,
+        hoverBackgroundColor: 'rgba(95, 209, 179, 0.45)',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        zeroReferenceLine: { scaleId: 'y' },
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label(context) {
+              const point = context.raw;
+              return [
+                `${point.label}: ${formatPercent(point.y)}`,
+                `Delta in seconds: ${formatSignedSeconds(point.deltaSeconds)}`,
+                `Access count: ${point.x}`,
+                `dTLB misses mean: ${compactNumber(point.misses)}`,
+                `Key: ${point.key}`,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          title: { display: true, text: 'Access count in the captured trace' }
+        },
+        y: {
+          title: { display: true, text: 'Runtime delta versus no_break (%)' }
+        }
+      }
+    },
+    plugins: [zeroReferenceLine]
+  });
+}
+
+function buildDTLBChart(rows) {
+  const ctx = document.getElementById('dtlbChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: rows.map((row) => row.short_label),
+      datasets: [
+        {
+          label: 'dTLB loads mean',
+          data: rows.map((row) => row.dtlb_loads_mean),
+          backgroundColor: 'rgba(121, 168, 255, 0.55)',
+          borderColor: 'rgba(121, 168, 255, 0.95)',
+          borderWidth: 1,
+        },
+        {
+          label: 'dTLB misses mean',
+          data: rows.map((row) => row.dtlb_misses_mean),
+          backgroundColor: 'rgba(244, 143, 177, 0.55)',
+          borderColor: 'rgba(244, 143, 177, 0.95)',
+          borderWidth: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            afterLabel(context) {
+              const row = rows[context.dataIndex];
+              const missRate = row.dtlb_miss_rate == null
+                ? 'N/A'
+                : `${(row.dtlb_miss_rate * 100).toFixed(2)}%`;
+              return [
+                `Runtime mean: ${formatSeconds(row.runtime_mean)}`,
+                `Miss rate: ${missRate}`,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          type: 'logarithmic',
+          title: { display: true, text: 'Mean counter value (log scale)' },
+          ticks: {
+            callback(value) {
+              if (value >= 1e9) return `${(value / 1e9).toFixed(0)}B`;
+              if (value >= 1e6) return `${(value / 1e6).toFixed(0)}M`;
+              return value;
+            }
+          }
+        },
+        x: {
+          title: { display: true, text: 'Rows in this rerun' }
+        }
+      }
+    }
+  });
+}
+
+function buildStories(metrics, rows) {
+  const splitRows = rows.filter((row) => row.row_type === 'split_only');
+  const slowestSplit = [...splitRows].sort(
+    (left, right) => right.runtime_delta_vs_no_break - left.runtime_delta_vs_no_break
+  )[0];
+  const hottest = [...splitRows].sort(
+    (left, right) => right.access_count - left.access_count
+  )[0];
+  const fastestSplit = [...splitRows].sort(
+    (left, right) => left.runtime_delta_vs_no_break - right.runtime_delta_vs_no_break
+  )[0];
+  const highestMissRate = [...splitRows].sort(
+    (left, right) => (right.dtlb_miss_rate || 0) - (left.dtlb_miss_rate || 0)
+  )[0];
+
+  const stories = [
+    {
+      title: 'Splitting everything is still the clearest penalty',
+      body: `all_break is ${formatPercent(metrics.all_break_pct_slower_than_no_break)} slower than no_break in this rerun, which is a much bigger effect than any single hot-key split.`
+    },
+    {
+      title: 'Most split-only rows still lose to no_break',
+      body: `${metrics.split_rows_slower_than_no_break}/${metrics.split_rows} split-only rows are slower than no_break. The mean split-only delta is ${formatPercent(percentDeltaFromNoBreak(metrics.no_break_runtime_s + metrics.split_mean_delta_s, metrics.no_break_runtime_s))}, or ${formatSignedSeconds(metrics.split_mean_delta_s)}.`
+    },
+    {
+      title: 'The hottest key is not the worst key',
+      body: `${hottest.short_label} has ${hottest.access_count} accesses but lands at ${formatPercent(percentDeltaFromNoBreak(hottest.runtime_mean, metrics.no_break_runtime_s))}. The worst split-only row is ${slowestSplit.short_label} at ${formatPercent(percentDeltaFromNoBreak(slowestSplit.runtime_mean, metrics.no_break_runtime_s))}.`
+    },
+    {
+      title: 'dTLB pressure only partly matches runtime pain',
+      body: `${highestMissRate.short_label} has the highest miss rate, while ${fastestSplit.short_label} is the fastest split-only row. That keeps the dTLB story interesting, but not clean enough to explain runtime alone.`
+    }
+  ];
+
+  document.getElementById('storyGrid').innerHTML = stories.map((story) => `
+    <div class="story">
+      <strong>${escapeHtml(story.title)}</strong>
+      <p>${escapeHtml(story.body)}</p>
+    </div>
+  `).join('');
+}
+
+function buildTable(rows, noBreakRuntime) {
+  const body = rows.map((row) => {
+    const deltaClass = row.runtime_delta_vs_no_break > 0 ? 'chip red' : 'chip teal';
+    const rowName = row.row_type === 'split_only' ? row.short_label : row.row_type;
+    const missRate = row.dtlb_miss_rate == null
+      ? 'N/A'
+      : `${(row.dtlb_miss_rate * 100).toFixed(2)}%`;
+    const deltaPercent = percentDeltaFromNoBreak(row.runtime_mean, noBreakRuntime);
+    return `
+      <tr>
+        <td><span class="${deltaClass}">${escapeHtml(rowName)}</span></td>
+        <td>${row.access_count == null ? 'Baseline' : row.access_count}</td>
+        <td>${formatSeconds(row.runtime_mean)}</td>
+        <td>${formatPercent(deltaPercent)} (${formatSignedSeconds(row.runtime_delta_vs_no_break)})</td>
+        <td>${compactNumber(row.dtlb_loads_mean)}</td>
+        <td>${compactNumber(row.dtlb_misses_mean)}</td>
+        <td>${missRate}</td>
+        <td class="mono">${row.key ? escapeHtml(row.key) : '<span class="chip blue">n/a</span>'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  document.getElementById('tableWrap').innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Row</th>
+          <th>Access count</th>
+          <th>Mean runtime</th>
+          <th>Delta vs no_break (%)</th>
+          <th>dTLB loads</th>
+          <th>dTLB misses</th>
+          <th>Miss rate</th>
+          <th>Redis key</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
+}
+
+function fillStatCards(metrics) {
+  document.getElementById('noBreakValue').textContent = formatSeconds(metrics.no_break_runtime_s);
+  document.getElementById('allBreakValue').textContent = formatSeconds(metrics.all_break_runtime_s);
+  document.getElementById('allBreakDetail').innerHTML =
+    `<span class="chip red">${formatPercent(metrics.all_break_pct_slower_than_no_break)}</span> slower than <code>no_break</code>`;
+  document.getElementById('slowerRowsValue').textContent =
+    `${metrics.split_rows_slower_than_no_break}/${metrics.split_rows}`;
+  document.getElementById('corrValue').textContent =
+    metrics.corr_access_vs_runtime_delta.toFixed(3);
+}
+
+Promise.all([
+  loadJSON('endpoll_10keys_metrics.json'),
+  loadJSON('endpoll_10keys_rows.json'),
+]).then(([metrics, rows]) => {
+  fillStatCards(metrics);
+  buildRuntimeChart(rows, metrics.no_break_runtime_s);
+  buildScatterChart(rows, metrics.no_break_runtime_s);
+  buildDTLBChart(rows);
+  buildStories(metrics, rows);
+  buildTable(rows, metrics.no_break_runtime_s);
+}).catch((error) => {
+  showError('runtimeDeltaError', error.message);
+  showError('scatterError', error.message);
+  showError('dtlbError', error.message);
+});
+</script>
+</body>
+</html>

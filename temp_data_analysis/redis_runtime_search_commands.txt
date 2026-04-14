@@ -1,0 +1,1 @@
+.venv/bin/python python/kernmlops/experiments/redis_thp_replication/runtime_search.py --container-name heuristic_allen --branch-name redis_runtimes --total-budget-hours 8.0 --stage1-hours 4.5 --max-mode-runtime-minutes 30.0 --resume-manifest /KernMLOps/temp_data_analysis/redis_runtime_search_latest_manifest.json

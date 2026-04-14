@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis THP Splitting Experiment Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --card-bg: #16213e;
+    --card-border: #0f3460;
+    --text: #e0e0e0;
+    --text-muted: #a0a0b0;
+    --accent1: #e94560;
+    --accent2: #0f3460;
+    --accent3: #53c9b1;
+    --accent4: #f5a623;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    padding: 20px;
+  }
+  header {
+    text-align: center;
+    margin-bottom: 30px;
+  }
+  header h1 {
+    font-size: 1.8rem;
+    margin-bottom: 10px;
+    color: #fff;
+  }
+  header p {
+    max-width: 800px;
+    margin: 0 auto;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+  }
+  .card.full-width {
+    grid-column: 1 / -1;
+  }
+  .card h2 {
+    font-size: 1.1rem;
+    margin-bottom: 6px;
+    color: #fff;
+  }
+  .card .desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+    line-height: 1.5;
+  }
+  .card .chart-wrap {
+    position: relative;
+    height: 400px;
+    flex: 1;
+  }
+  .card .chart-wrap canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .card .chart-wrap.tall {
+    height: 560px;
+  }
+  .error-msg {
+    color: var(--accent1);
+    font-size: 0.9rem;
+    padding: 10px;
+    text-align: center;
+    background: rgba(233,69,96,0.1);
+    border-radius: 8px;
+  }
+  /* Summary table */
+  table.summary {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  table.summary th, table.summary td {
+    padding: 10px 14px;
+    text-align: right;
+    border-bottom: 1px solid var(--card-border);
+  }
+  table.summary th {
+    text-align: left;
+    color: var(--accent3);
+    font-weight: 600;
+  }
+  table.summary td:first-child {
+    text-align: left;
+    font-weight: 500;
+  }
+  table.summary thead th {
+    color: #fff;
+    border-bottom: 2px solid var(--card-border);
+  }
+  table.summary tbody tr:hover {
+    background: rgba(255,255,255,0.03);
+  }
+  .metric-chip {
+    display: inline-block;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .metric-blue {
+    color: #dce8ff;
+    background: rgba(79,140,255,0.18);
+  }
+  .metric-orange {
+    color: #ffecce;
+    background: rgba(245,166,35,0.18);
+  }
+  .metric-red {
+    color: #ffd9df;
+    background: rgba(233,69,96,0.18);
+  }
+  .metric-green {
+    color: #d7fff6;
+    background: rgba(83,201,177,0.18);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Redis THP Splitting Experiment Dashboard</h1>
+  <p>
+    This dashboard visualizes results from Transparent Huge Page (THP) splitting
+    experiments on Redis. Each row represents a different experiment configuration
+    against the same Redis workload. <strong>Row 0</strong> is the all-broken run
+    where every tracked THP is split into 4 KB pages. <strong>Row 1</strong> is the
+    no-split baseline. <strong>Rows 2&ndash;31</strong> each split only one hot key's
+    THP while the rest stay intact, which lets us estimate how costly that one split is.
+  </p>
+</header>
+
+<div class="grid">
+
+  <!-- Section 1: Runtime Overview -->
+  <div class="card full-width">
+    <h2>Section 1 &mdash; Runtime Overview (All 32 Rows)</h2>
+    <p class="desc">Mean Redis benchmark runtime for each experiment row, with error bars (std dev across 3 trials). <strong>Row 0 = all-broken</strong>: every tracked THP is split into 4 KB pages. This is the <em>slowest</em> row (~20.7s test1), confirming that splitting THPs hurts Redis. <strong>Row 1 = baseline</strong>: no THPs are split, all 2 MiB huge pages remain intact (~17.8s test1, faster). <strong>Rows 2&ndash;31</strong>: only one hot key's THP is split while the rest stay intact, isolating that key's THP contribution. <span class="metric-chip metric-blue">Blue bars</span> = Test 1 (hotkey runtime only); <span class="metric-chip metric-orange">orange bars</span> = Test 2 (runtime + dTLB counter collection, which adds overhead).</p>
+    <div class="chart-wrap"><canvas id="runtimeChart"></canvas></div>
+    <div id="runtimeError"></div>
+  </div>
+
+  <!-- Section 1b: Combined Comparison -->
+  <div class="card full-width">
+    <h2>Section 1b &mdash; Combined: Runtimes + dTLB Loads + dTLB Misses</h2>
+    <p class="desc">All four key metrics on one chart. <span class="metric-chip metric-blue">Blue line</span> = Test 1 runtime (s), <span class="metric-chip metric-orange">orange line</span> = Test 2 runtime (s), both on the left Y-axis. <span class="metric-chip metric-red">Red bars</span> = mean dTLB loads, <span class="metric-chip metric-green">green bars</span> = mean dTLB misses, both on the right Y-axis (log scale). Row 0 (all-broken, every THP split) is slowest; row 1 (baseline, no splitting) is fastest. Rows 2&ndash;31 split only one hot key each.</p>
+    <div class="chart-wrap"><canvas id="combinedChart"></canvas></div>
+    <div id="combinedError"></div>
+  </div>
+
+  <!-- Section 2: Improvement vs Access Count -->
+  <div class="card">
+    <h2>Section 2 &mdash; Runtime Change vs Split-Key Access Count</h2>
+    <p class="desc">Each dot is one split-only-key experiment (rows 2&ndash;31). The X-axis is how many times that key was accessed during the workload; the Y-axis is the runtime change (%) compared to row 1, the no-split baseline. <span class="metric-chip metric-green">Green dots</span> are faster than baseline, while <span class="metric-chip metric-red">red dots</span> are slower. The dashed horizontal line marks zero change.</p>
+    <div class="chart-wrap"><canvas id="scatterChart"></canvas></div>
+    <div id="scatterError"></div>
+  </div>
+
+  <!-- Section 3: dTLB Miss Analysis -->
+  <div class="card">
+    <h2>Section 3 &mdash; dTLB Miss Analysis</h2>
+    <p class="desc">Hardware dTLB (data Translation Lookaside Buffer) counters from Test 2. Bars show total dTLB loads and misses (averaged over 3 trials). The green line shows the miss rate (misses / loads). Higher miss rates indicate more address-translation overhead, which THP splitting can influence.</p>
+    <div class="chart-wrap"><canvas id="dtlbChart"></canvas></div>
+    <div id="dtlbError"></div>
+  </div>
+
+  <!-- Section 4: Access Count Distribution -->
+  <div class="card">
+    <h2>Section 4 &mdash; Access Count Distribution</h2>
+    <p class="desc">How many of the 4095 Redis keys fall into each cold-to-hot access bucket during the no-split baseline run. Most keys are "cold" with single-digit or low double-digit access counts, while only a small tail becomes truly hot. The Y-axis uses a log scale so those hot-tail buckets stay visible next to the cold-key majority, and each bar is labeled with its exact key count.</p>
+    <div class="chart-wrap"><canvas id="histChart"></canvas></div>
+    <div id="histError"></div>
+  </div>
+
+  <!-- Section 5: Top 30 Hottest Keys -->
+  <div class="card">
+    <h2>Section 5 &mdash; Top 30 Hottest Keys by Access Count</h2>
+    <p class="desc">The 30 most frequently accessed keys, sorted by access count. <span class="metric-chip metric-blue">Blue bars</span> show access count in the no-split baseline run. <span class="metric-chip metric-green">Green dots</span> show runtime change (%) versus row 1 when that key was the only one whose THP was split. Values above zero mean splitting that key helped, while values below zero mean it hurt.</p>
+    <div class="chart-wrap tall"><canvas id="topKeysChart"></canvas></div>
+    <div id="topKeysError"></div>
+  </div>
+
+  <!-- Section 6: Summary Stats -->
+  <div class="card full-width">
+    <h2>Section 6 &mdash; Summary Statistics</h2>
+    <p class="desc">Key numbers at a glance: no-split baseline runtime, all-broken runtime, and the best/worst runtimes among the single-split-key experiments, for both Test 1 and Test 2.</p>
+    <div id="summaryTableWrap"></div>
+    <div id="summaryError"></div>
+  </div>
+
+</div>
+
+<script>
+// -- Helpers --
+Chart.defaults.color = '#a0a0b0';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+async function loadJSON(file) {
+  const resp = await fetch(file);
+  if (!resp.ok) throw new Error(`Failed to load ${file} (${resp.status})`);
+  return resp.json();
+}
+
+function showError(id, msg) {
+  document.getElementById(id).innerHTML = `<div class="error-msg">${msg}</div>`;
+}
+
+function rowLabel(row) {
+  return row.label || `Row ${row.row}`;
+}
+
+function rowMeaning(row) {
+  if (row.kind === 'all-broken' || row.row === 0) {
+    return 'All-broken: every tracked THP split';
+  }
+  if (row.kind === 'baseline' || row.row === 1) {
+    return 'Baseline: no THPs split';
+  }
+  return row.spared_key ? `Split-only key: ${row.spared_key}` : 'Single split-key experiment';
+}
+
+function shortKey(key) {
+  if (!key) {
+    return 'N/A';
+  }
+  if (key.length <= 14) {
+    return key;
+  }
+  return `${key.slice(0, 4)}...${key.slice(-8)}`;
+}
+
+function formatPercent(value) {
+  if (value == null || Number.isNaN(value)) {
+    return 'N/A';
+  }
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(2)}%`;
+}
+
+function formatSecondsDelta(value) {
+  if (value == null || Number.isNaN(value)) {
+    return 'N/A';
+  }
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(3)} s`;
+}
+
+function compactNumber(value) {
+  if (value == null || Number.isNaN(value)) {
+    return 'N/A';
+  }
+  if (Math.abs(value) >= 1e9) {
+    return `${(value / 1e9).toFixed(1)}B`;
+  }
+  if (Math.abs(value) >= 1e6) {
+    return `${(value / 1e6).toFixed(1)}M`;
+  }
+  if (Math.abs(value) >= 1e3) {
+    return `${(value / 1e3).toFixed(1)}K`;
+  }
+  return `${value}`;
+}
+
+const zeroReferenceLine = {
+  id: 'zeroReferenceLine',
+  afterDraw(chart, args, pluginOptions) {
+    const scaleId = pluginOptions?.scaleId;
+    if (!scaleId || !chart.scales[scaleId]) {
+      return;
+    }
+    const scale = chart.scales[scaleId];
+    if (scale.min > 0 || scale.max < 0) {
+      return;
+    }
+    const valuePx = scale.getPixelForValue(0);
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    if (scale.axis === 'x') {
+      ctx.moveTo(valuePx, chartArea.top);
+      ctx.lineTo(valuePx, chartArea.bottom);
+    } else {
+      ctx.moveTo(chartArea.left, valuePx);
+      ctx.lineTo(chartArea.right, valuePx);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+};
+
+const barValueLabels = {
+  id: 'barValueLabels',
+  afterDatasetsDraw(chart, args, pluginOptions) {
+    const options = pluginOptions || {};
+    const datasetIndex = options.datasetIndex ?? 0;
+    const dataset = chart.data.datasets[datasetIndex];
+    const meta = chart.getDatasetMeta(datasetIndex);
+    if (!dataset || !meta || meta.hidden) {
+      return;
+    }
+
+    const formatter = options.formatter || (value => `${value}`);
+    const { ctx, chartArea } = chart;
+    ctx.save();
+    ctx.fillStyle = options.color || '#e0e0e0';
+    ctx.font = `600 11px ${Chart.defaults.font.family}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+
+    meta.data.forEach((element, index) => {
+      const rawValue = dataset.data[index];
+      if (rawValue == null) {
+        return;
+      }
+      const text = formatter(rawValue, index, dataset);
+      const labelY = Math.max(chartArea.top + 12, element.y - (options.offset || 6));
+      ctx.fillText(text, element.x, labelY);
+    });
+
+    ctx.restore();
+  }
+};
+
+// ========== Section 1: Runtime Overview ==========
+loadJSON('runtime_comparison.json').then(data => {
+  const labels = data.map(rowLabel);
+  const ctx = document.getElementById('runtimeChart').getContext('2d');
+
+  // Solid consistent colors so bars are easy to distinguish
+  const bgTest1 = 'rgba(79,140,255,0.75)';
+  const bgTest2 = 'rgba(245,166,35,0.75)';
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Test 1 (hotkey) Mean Runtime — BLUE',
+          data: data.map(d => d.test1_mean),
+          backgroundColor: bgTest1,
+          borderColor: 'rgba(79,140,255,1)',
+          borderWidth: 1,
+          errorBars: data.map(d => d.test1_std),
+        },
+        {
+          label: 'Test 2 (dTLB) Mean Runtime — ORANGE',
+          data: data.map(d => d.test2_mean),
+          backgroundColor: bgTest2,
+          borderColor: 'rgba(245,166,35,1)',
+          borderWidth: 1,
+          errorBars: data.map(d => d.test2_std),
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            title: function(items) {
+              return rowLabel(data[items[0].dataIndex]);
+            },
+            afterLabel: function(ctx) {
+              const d = data[ctx.dataIndex];
+              const std = ctx.datasetIndex === 0 ? d.test1_std : d.test2_std;
+              return [
+                `Std Dev: ${std != null ? std.toFixed(3) : 'N/A'}`,
+                rowMeaning(d),
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        y: { title: { display: true, text: 'Runtime (s)' } },
+        x: { title: { display: true, text: 'Experiment Row' } }
+      }
+    },
+    plugins: [{
+      id: 'errorBars',
+      afterDraw(chart) {
+        const { ctx } = chart;
+        chart.data.datasets.forEach((ds, di) => {
+          const meta = chart.getDatasetMeta(di);
+          meta.data.forEach((bar, i) => {
+            const std = ds.errorBars ? ds.errorBars[i] : null;
+            if (std == null || std === 0) return;
+            const val = ds.data[i];
+            const yTop = chart.scales.y.getPixelForValue(val + std);
+            const yBot = chart.scales.y.getPixelForValue(val - std);
+            const x = bar.x;
+            ctx.save();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.2;
+            ctx.beginPath();
+            ctx.moveTo(x, yTop);
+            ctx.lineTo(x, yBot);
+            ctx.moveTo(x - 4, yTop);
+            ctx.lineTo(x + 4, yTop);
+            ctx.moveTo(x - 4, yBot);
+            ctx.lineTo(x + 4, yBot);
+            ctx.stroke();
+            ctx.restore();
+          });
+        });
+      }
+    }]
+  });
+}).catch(e => showError('runtimeError', e.message));
+
+// ========== Section 1b: Combined Chart ==========
+Promise.all([
+  loadJSON('runtime_comparison.json'),
+  loadJSON('dtlb_comparison.json')
+]).then(([rtData, dtlbData]) => {
+  const labels = rtData.map(rowLabel);
+  const ctx = document.getElementById('combinedChart').getContext('2d');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'dTLB Loads (mean) — RED BARS',
+          data: dtlbData.map(d => d.mean_loads),
+          backgroundColor: 'rgba(233,69,96,0.4)',
+          borderColor: 'rgba(233,69,96,0.8)',
+          borderWidth: 1,
+          yAxisID: 'y2',
+          order: 4,
+        },
+        {
+          label: 'dTLB Misses (mean) — GREEN BARS',
+          data: dtlbData.map(d => d.mean_misses),
+          backgroundColor: 'rgba(83,201,177,0.4)',
+          borderColor: 'rgba(83,201,177,0.8)',
+          borderWidth: 1,
+          yAxisID: 'y2',
+          order: 3,
+        },
+        {
+          label: 'Test 1 Runtime (s) — BLUE LINE',
+          data: rtData.map(d => d.test1_mean),
+          type: 'line',
+          borderColor: 'rgba(79,140,255,1)',
+          backgroundColor: 'rgba(79,140,255,0.1)',
+          pointBackgroundColor: 'rgba(79,140,255,1)',
+          pointRadius: 4,
+          borderWidth: 2.5,
+          fill: false,
+          tension: 0.2,
+          yAxisID: 'y1',
+          order: 1,
+        },
+        {
+          label: 'Test 2 Runtime (s) — ORANGE LINE',
+          data: rtData.map(d => d.test2_mean),
+          type: 'line',
+          borderColor: 'rgba(245,166,35,1)',
+          backgroundColor: 'rgba(245,166,35,0.1)',
+          pointBackgroundColor: 'rgba(245,166,35,1)',
+          pointRadius: 4,
+          borderWidth: 2.5,
+          fill: false,
+          tension: 0.2,
+          yAxisID: 'y1',
+          order: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        y1: {
+          position: 'left',
+          title: { display: true, text: 'Runtime (s)', color: '#4f8cff' },
+          ticks: { color: '#4f8cff' },
+        },
+        y2: {
+          position: 'right',
+          type: 'logarithmic',
+          title: { display: true, text: 'dTLB Count (log scale)', color: '#e94560' },
+          ticks: {
+            color: '#e94560',
+            callback: v => {
+              if (v >= 1e9) return (v/1e9).toFixed(1) + 'B';
+              if (v >= 1e6) return (v/1e6).toFixed(1) + 'M';
+              if (v >= 1e3) return (v/1e3).toFixed(0) + 'K';
+              return v;
+            }
+          },
+          grid: { drawOnChartArea: false },
+        },
+        x: { title: { display: true, text: 'Experiment Row' } }
+      }
+    }
+  });
+}).catch(e => showError('combinedError', e.message));
+
+// ========== Section 2: Scatter - Improvement vs Access Count ==========
+loadJSON('hotkey_analysis.json').then(raw => {
+  const entries = raw.entries || raw;
+  const points = entries
+    .filter(d => Number(d.row) > 1)
+    .map(d => ({
+      x: Number(d.access_count_in_no_split),
+      y: Number(d.runtime_improvement_pct_vs_no_split),
+      rowData: d,
+    }))
+    .filter(point => Number.isFinite(point.x) && Number.isFinite(point.y) && point.x > 0);
+  if (!points.length) {
+    throw new Error('No split-key points were available for Section 2.');
+  }
+
+  const yValues = points.map(point => point.y);
+  const minY = Math.min(...yValues);
+  const maxY = Math.max(...yValues);
+  const yPadding = Math.max(0.5, (maxY - minY) * 0.18);
+  const maxAccessCount = Math.max(...points.map(point => point.x));
+  const ctx = document.getElementById('scatterChart').getContext('2d');
+
+  new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [
+        {
+          label: 'Runtime Change vs No-Split Baseline (%)',
+          parsing: false,
+          data: points,
+          backgroundColor: points.map(point => (
+            point.y >= 0 ? 'rgba(83,201,177,0.9)' : 'rgba(233,69,96,0.9)'
+          )),
+          borderColor: points.map(point => (
+            point.y >= 0 ? 'rgba(83,201,177,1)' : 'rgba(233,69,96,1)'
+          )),
+          pointBackgroundColor: points.map(point => (
+            point.y >= 0 ? 'rgba(83,201,177,0.9)' : 'rgba(233,69,96,0.9)'
+          )),
+          pointBorderColor: points.map(point => (
+            point.y >= 0 ? 'rgba(83,201,177,1)' : 'rgba(233,69,96,1)'
+          )),
+          pointRadius: 5,
+          pointHoverRadius: 7,
+          pointBorderWidth: 1.5,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        zeroReferenceLine: { scaleId: 'y' },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const d = points[ctx.dataIndex].rowData;
+              return [
+                `Row: ${rowLabel(d)}`,
+                `Split key: ${d.spared_key}`,
+                `Accesses: ${d.access_count_in_no_split}`,
+                `Runtime delta: ${formatSecondsDelta(d.runtime_delta_vs_no_split_seconds)}`,
+                `Change: ${formatPercent(ctx.parsed.y)}`,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          min: 0,
+          max: Math.ceil(maxAccessCount / 100) * 100,
+          title: { display: true, text: 'Split-Key Access Count' },
+          ticks: {
+            callback: value => compactNumber(value),
+            maxTicksLimit: 8,
+          }
+        },
+        y: {
+          min: minY - yPadding,
+          max: maxY + yPadding,
+          title: { display: true, text: 'Runtime Change vs No-Split Baseline (%)' },
+          ticks: {
+            callback: value => `${value}%`,
+          }
+        }
+      }
+    },
+    plugins: [zeroReferenceLine]
+  });
+}).catch(e => showError('scatterError', e.message));
+
+// ========== Section 3: dTLB Analysis ==========
+loadJSON('dtlb_comparison.json').then(data => {
+  const labels = data.map(rowLabel);
+  const ctx = document.getElementById('dtlbChart').getContext('2d');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'dTLB Loads (mean)',
+          data: data.map(d => d.mean_loads),
+          backgroundColor: 'rgba(79,140,255,0.55)',
+          borderColor: 'rgba(79,140,255,0.9)',
+          borderWidth: 1,
+          yAxisID: 'y',
+        },
+        {
+          label: 'dTLB Misses (mean)',
+          data: data.map(d => d.mean_misses),
+          backgroundColor: 'rgba(233,69,96,0.45)',
+          borderColor: 'rgba(233,69,96,0.9)',
+          borderWidth: 1,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Miss Rate',
+          data: data.map(d => d.miss_rate),
+          type: 'line',
+          borderColor: 'rgba(83,201,177,1)',
+          backgroundColor: 'rgba(83,201,177,0.15)',
+          pointBackgroundColor: 'rgba(83,201,177,1)',
+          pointRadius: 3,
+          fill: true,
+          tension: 0.3,
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          position: 'left',
+          title: { display: true, text: 'Count' }
+        },
+        y1: {
+          position: 'right',
+          title: { display: true, text: 'Miss Rate' },
+          grid: { drawOnChartArea: false },
+          ticks: {
+            callback: v => (v * 100).toFixed(2) + '%'
+          }
+        },
+        x: { title: { display: true, text: 'Experiment Row' } }
+      }
+    }
+  });
+}).catch(e => showError('dtlbError', e.message));
+
+// ========== Section 4: Access Count Histogram ==========
+loadJSON('access_distribution.json').then(data => {
+  const binsArr = data.bins;
+  const counts = binsArr.map(b => b.count);
+  const labels = binsArr.map(b => b.label || `${Math.round(b.bin_start)}-${Math.round(b.bin_end)}`);
+
+  const ctx = document.getElementById('histChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Key Count',
+        data: counts,
+        backgroundColor: [
+          'rgba(79,140,255,0.75)',
+          'rgba(79,140,255,0.75)',
+          'rgba(79,140,255,0.75)',
+          'rgba(83,201,177,0.75)',
+          'rgba(83,201,177,0.75)',
+          'rgba(245,166,35,0.78)',
+          'rgba(245,166,35,0.8)',
+          'rgba(233,69,96,0.82)',
+          'rgba(233,69,96,0.9)',
+        ],
+        borderColor: [
+          'rgba(79,140,255,1)',
+          'rgba(79,140,255,1)',
+          'rgba(79,140,255,1)',
+          'rgba(83,201,177,1)',
+          'rgba(83,201,177,1)',
+          'rgba(245,166,35,1)',
+          'rgba(245,166,35,1)',
+          'rgba(233,69,96,1)',
+          'rgba(233,69,96,1)',
+        ],
+        borderWidth: 1,
+        borderRadius: 8,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: function(items) {
+              return `Access bucket: ${labels[items[0].dataIndex]}`;
+            },
+            label: function(ctx) {
+              const count = ctx.parsed.y;
+              const share = data.total_keys ? (count / data.total_keys) * 100 : 0;
+              return `Keys: ${count} (${share.toFixed(1)}%)`;
+            }
+          }
+        },
+        barValueLabels: {
+          datasetIndex: 0,
+          formatter: value => compactNumber(value),
+        }
+      },
+      scales: {
+        y: {
+          type: 'logarithmic',
+          min: 1,
+          title: { display: true, text: 'Number of Keys (log scale)' },
+          ticks: {
+            callback: value => compactNumber(value),
+          }
+        },
+        x: { title: { display: true, text: 'Access Count Range' } }
+      }
+    },
+    plugins: [barValueLabels]
+  });
+}).catch(e => showError('histError', e.message));
+
+// ========== Section 5: Top 30 Keys ==========
+loadJSON('top_keys.json').then(raw => {
+  const data = raw.entries || raw;
+  const labels = data.map(d => d.short_key || shortKey(d.key));
+  const ctx = document.getElementById('topKeysChart').getContext('2d');
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Access Count',
+          data: data.map(d => d.access_count),
+          backgroundColor: 'rgba(79,140,255,0.6)',
+          borderColor: 'rgba(79,140,255,0.9)',
+          borderWidth: 1,
+          xAxisID: 'x',
+          order: 2,
+        },
+        {
+          label: 'Runtime Change (%)',
+          type: 'line',
+          data: data.map(d => d.runtime_improvement_pct_vs_no_split),
+          borderColor: 'rgba(83,201,177,1)',
+          backgroundColor: 'rgba(83,201,177,0.15)',
+          pointBackgroundColor: 'rgba(83,201,177,1)',
+          pointBorderColor: 'rgba(83,201,177,1)',
+          pointRadius: 4,
+          pointHoverRadius: 5,
+          borderWidth: 2,
+          tension: 0.2,
+          fill: false,
+          xAxisID: 'x2',
+          yAxisID: 'y',
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', axis: 'y', intersect: false },
+      plugins: {
+        zeroReferenceLine: { scaleId: 'x2' },
+        tooltip: {
+          callbacks: {
+            title: function(items) {
+              return data[items[0].dataIndex].key;
+            },
+            afterBody: function(items) {
+              const d = data[items[0].dataIndex];
+              return [
+                `Row: ${d.spared_row != null ? `Row ${d.spared_row}` : 'N/A'}`,
+                `Split-only runtime: ${d.spared_mean_runtime != null ? `${d.spared_mean_runtime.toFixed(3)} s` : 'N/A'}`,
+                `Runtime delta: ${formatSecondsDelta(d.runtime_delta_vs_no_split_seconds)}`,
+                `Change: ${formatPercent(d.runtime_improvement_pct_vs_no_split)}`,
+              ];
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          position: 'bottom',
+          title: { display: true, text: 'Access Count' },
+          ticks: {
+            callback: value => compactNumber(value),
+          }
+        },
+        x2: {
+          position: 'top',
+          title: { display: true, text: 'Runtime Change vs No-Split Baseline (%)' },
+          grid: { drawOnChartArea: false },
+          ticks: {
+            callback: value => `${value}%`,
+          }
+        },
+        y: {
+          ticks: { font: { size: 10 } }
+        }
+      }
+    },
+    plugins: [zeroReferenceLine]
+  });
+}).catch(e => showError('topKeysError', e.message));
+
+// ========== Section 6: Summary Table ==========
+loadJSON('runtime_comparison.json').then(data => {
+  const row0 = data.find(d => d.row === 0);
+  const row1 = data.find(d => d.row === 1);
+  const sparedRows = data.filter(d => d.row > 1);
+
+  function best(arr, key) {
+    return arr.reduce((a, b) => a[key] < b[key] ? a : b);
+  }
+  function worst(arr, key) {
+    return arr.reduce((a, b) => a[key] > b[key] ? a : b);
+  }
+
+  const bestT1 = best(sparedRows, 'test1_mean');
+  const worstT1 = worst(sparedRows, 'test1_mean');
+  const bestT2 = best(sparedRows, 'test2_mean');
+  const worstT2 = worst(sparedRows, 'test2_mean');
+
+  const fmt = v => v != null ? v.toFixed(4) : 'N/A';
+  const summaryRowLabel = d => {
+    if (!d) {
+      return 'N/A';
+    }
+    if (!d.spared_key) {
+      return rowLabel(d);
+    }
+    return `${rowLabel(d)} (${shortKey(d.spared_key)})`;
+  };
+
+  const html = `
+  <table class="summary">
+    <thead>
+      <tr>
+        <th>Metric</th>
+        <th>Test 1 (hotkey)</th>
+        <th>Test 1 Row</th>
+        <th>Test 2 (dTLB)</th>
+        <th>Test 2 Row</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Baseline Runtime (Row 0)</td>
+        <td>${fmt(row0?.test1_mean)}</td>
+        <td>Row 0</td>
+        <td>${fmt(row0?.test2_mean)}</td>
+        <td>Row 0</td>
+      </tr>
+      <tr>
+        <td>All-Broken Runtime (Row 1)</td>
+        <td>${fmt(row1?.test1_mean)}</td>
+        <td>Row 1</td>
+        <td>${fmt(row1?.test2_mean)}</td>
+        <td>Row 1</td>
+      </tr>
+      <tr>
+        <td>Best Spared Runtime</td>
+        <td>${fmt(bestT1.test1_mean)}</td>
+        <td>${summaryRowLabel(bestT1)}</td>
+        <td>${fmt(bestT2.test2_mean)}</td>
+        <td>${summaryRowLabel(bestT2)}</td>
+      </tr>
+      <tr>
+        <td>Worst Spared Runtime</td>
+        <td>${fmt(worstT1.test1_mean)}</td>
+        <td>${summaryRowLabel(worstT1)}</td>
+        <td>${fmt(worstT2.test2_mean)}</td>
+        <td>${summaryRowLabel(worstT2)}</td>
+      </tr>
+    </tbody>
+  </table>`;
+
+  document.getElementById('summaryTableWrap').innerHTML = html;
+}).catch(e => showError('summaryError', e.message));
+</script>
+
+</body>
+</html>

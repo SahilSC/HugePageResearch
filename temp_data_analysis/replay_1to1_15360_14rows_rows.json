@@ -1,0 +1,240 @@
+[
+  {
+    "row_type": "base_pages",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      7.985809937119484,
+      7.107169238151982,
+      6.416738009080291
+    ],
+    "runtime_mean": 7.169905728117253,
+    "runtime_std": 0.7864150171633484,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "base_pages",
+    "runtime_delta_vs_no_break": -0.11204974019589464,
+    "runtime_pct_vs_no_break": -1.5387314668905971
+  },
+  {
+    "row_type": "no_break",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      7.567387135932222,
+      6.9665810719598085,
+      7.311898197047412
+    ],
+    "runtime_mean": 7.281955468313147,
+    "runtime_std": 0.3015201599885923,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "no_break",
+    "runtime_delta_vs_no_break": 0.0,
+    "runtime_pct_vs_no_break": 0.0
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user3798598596772897818",
+    "access_count": 549,
+    "runtime_samples": [
+      7.2355042840354145,
+      7.80063899513334,
+      7.2569420482032
+    ],
+    "runtime_mean": 7.431028442457318,
+    "runtime_std": 0.32027154872113484,
+    "hot_rank": 1,
+    "random_rank": null,
+    "short_label": "hot#1",
+    "runtime_delta_vs_no_break": 0.14907297414417098,
+    "runtime_pct_vs_no_break": 2.0471558057838957
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user6185976841615236091",
+    "access_count": 326,
+    "runtime_samples": [
+      7.5579101908952,
+      7.622645509894937,
+      7.484601123025641
+    ],
+    "runtime_mean": 7.555052274605259,
+    "runtime_std": 0.06906655450122169,
+    "hot_rank": 2,
+    "random_rank": null,
+    "short_label": "hot#2",
+    "runtime_delta_vs_no_break": 0.27309680629211197,
+    "runtime_pct_vs_no_break": 3.750322389095495
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user1583359853641655575",
+    "access_count": 241,
+    "runtime_samples": [
+      7.472823005868122,
+      7.089105890132487,
+      7.290377971949056
+    ],
+    "runtime_mean": 7.284102289316555,
+    "runtime_std": 0.19193552139063944,
+    "hot_rank": 3,
+    "random_rank": null,
+    "short_label": "hot#3",
+    "runtime_delta_vs_no_break": 0.00214682100340724,
+    "runtime_pct_vs_no_break": 0.029481380554297054
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user5504320477202123438",
+    "access_count": 158,
+    "runtime_samples": [
+      7.478807357139885,
+      7.475114884087816,
+      8.039947664132342
+    ],
+    "runtime_mean": 7.664623301786681,
+    "runtime_std": 0.32504567573949156,
+    "hot_rank": 4,
+    "random_rank": null,
+    "short_label": "hot#4",
+    "runtime_delta_vs_no_break": 0.3826678334735334,
+    "runtime_pct_vs_no_break": 5.255014743480402
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user3478864142300894949",
+    "access_count": 119,
+    "runtime_samples": [
+      7.162344459211454,
+      7.03701545484364,
+      6.933481708867475
+    ],
+    "runtime_mean": 7.0442805409741895,
+    "runtime_std": 0.11460421340908795,
+    "hot_rank": 5,
+    "random_rank": null,
+    "short_label": "hot#5",
+    "runtime_delta_vs_no_break": -0.2376749273389578,
+    "runtime_pct_vs_no_break": -3.2638887778589365
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user3904206309816411729",
+    "access_count": 111,
+    "runtime_samples": [
+      7.232105624163523,
+      7.759353091008961,
+      6.850635185139254
+    ],
+    "runtime_mean": 7.280697966770579,
+    "runtime_std": 0.45630359403810067,
+    "hot_rank": 6,
+    "random_rank": null,
+    "short_label": "hot#6",
+    "runtime_delta_vs_no_break": -0.0012575015425682068,
+    "runtime_pct_vs_no_break": -0.017268734312370082
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user9101410179314517614",
+    "access_count": 95,
+    "runtime_samples": [
+      7.143573148874566,
+      6.751396816922352,
+      6.6869947330560535
+    ],
+    "runtime_mean": 6.860654899617657,
+    "runtime_std": 0.2471213445324508,
+    "hot_rank": 7,
+    "random_rank": null,
+    "short_label": "hot#7",
+    "runtime_delta_vs_no_break": -0.42130056869549026,
+    "runtime_pct_vs_no_break": -5.785541679412165
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user1584479774665936471",
+    "access_count": 73,
+    "runtime_samples": [
+      7.483309483155608,
+      6.753660165937617,
+      6.805997967952862
+    ],
+    "runtime_mean": 7.014322539015363,
+    "runtime_std": 0.40699677727280725,
+    "hot_rank": 8,
+    "random_rank": null,
+    "short_label": "hot#8",
+    "runtime_delta_vs_no_break": -0.26763292929778437,
+    "runtime_pct_vs_no_break": -3.675289288191441
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user7507330675659139950",
+    "access_count": 71,
+    "runtime_samples": [
+      7.128143906826153,
+      7.083813830977306,
+      7.1139330610167235
+    ],
+    "runtime_mean": 7.108630266273394,
+    "runtime_std": 0.022635782077466565,
+    "hot_rank": 9,
+    "random_rank": null,
+    "short_label": "hot#9",
+    "runtime_delta_vs_no_break": -0.1733252020397531,
+    "runtime_pct_vs_no_break": -2.380201345558397
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user7149753302442999282",
+    "access_count": 67,
+    "runtime_samples": [
+      6.95386401610449,
+      7.721853005932644,
+      7.129632173106074
+    ],
+    "runtime_mean": 7.268449731714402,
+    "runtime_std": 0.402373592644696,
+    "hot_rank": 10,
+    "random_rank": null,
+    "short_label": "hot#10",
+    "runtime_delta_vs_no_break": -0.013505736598744988,
+    "runtime_pct_vs_no_break": -0.18546854148606684
+  },
+  {
+    "row_type": "random_split_only",
+    "key": "user5937696772514052801",
+    "access_count": 2,
+    "runtime_samples": [
+      6.276455183047801,
+      7.353442729217932,
+      7.076104334089905
+    ],
+    "runtime_mean": 6.902000748785213,
+    "runtime_std": 0.5592044236800625,
+    "hot_rank": null,
+    "random_rank": 1,
+    "short_label": "rand#1",
+    "runtime_delta_vs_no_break": -0.3799547195279347,
+    "runtime_pct_vs_no_break": -5.217756702595578
+  },
+  {
+    "row_type": "random_split_only",
+    "key": "user8502697076282865012",
+    "access_count": 1,
+    "runtime_samples": [
+      7.546545285964385,
+      6.315742654027417,
+      6.515737636014819
+    ],
+    "runtime_mean": 6.792675192002207,
+    "runtime_std": 0.6604843579774938,
+    "hot_rank": null,
+    "random_rank": 2,
+    "short_label": "rand#2",
+    "runtime_delta_vs_no_break": -0.4892802763109403,
+    "runtime_pct_vs_no_break": -6.719078116310994
+  }
+]

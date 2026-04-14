@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redis outer-iteration YCSB runtime overlay</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --ink: #1b2733;
+      --muted: #5e6c7b;
+      --border: #d8e0ea;
+      --card: #ffffff;
+      --always: #1f77b4;
+      --never: #d62728;
+    }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(15, 139, 141, 0.10), transparent 34%),
+        linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 22px 48px;
+    }
+    header {
+      background: linear-gradient(135deg, #102a43 0%, #1f4b6e 55%, #0f8b8d 100%);
+      color: #f8fbff;
+      border-radius: 24px;
+      padding: 28px 30px;
+      box-shadow: 0 24px 70px rgba(16, 42, 67, 0.22);
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+    header p {
+      margin: 6px 0;
+      max-width: 940px;
+      color: rgba(248, 251, 255, 0.92);
+      line-height: 1.45;
+      font-size: 16px;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .metric, .card {
+      background: var(--card);
+      border-radius: 20px;
+      border: 1px solid rgba(216, 224, 234, 0.85);
+      box-shadow: 0 18px 48px rgba(26, 38, 53, 0.08);
+    }
+    .metric {
+      padding: 16px 18px;
+    }
+    .metric-label {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .metric-sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .card {
+      padding: 18px;
+      margin-top: 18px;
+    }
+    .card h2 {
+      margin: 0 0 4px;
+      font-size: 22px;
+    }
+    .subtitle {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 12px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: #f7fafc;
+    }
+    td.empty {
+      color: #98a3ad;
+    }
+    code {
+      background: #edf2f7;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 0.95em;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>YCSB outer-iteration runtime overlay</h1>
+      <p>This report compares the curated Redis benchmark logs for
+      <code>20260413T021419067720</code> and <code>20260413T013901313762</code>.
+      The x-axis spans the longer <code>outer_repeat=20</code> run, while the
+      shorter <code>outer_repeat=10</code> run stops at its final observed point.</p>
+      <p>The charts use only raw YCSB <code>[OVERALL], RunTime(ms)</code>
+      values, converted to seconds.</p>
+    </header>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Always Collection</div>
+        <div class="metric-value">20260413T021419067720</div>
+        <div class="metric-sub">outer_repeat=20</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Never Collection</div>
+        <div class="metric-value">20260413T013901313762</div>
+        <div class="metric-sub">outer_repeat=10</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Longest X-Axis</div>
+        <div class="metric-value">20</div>
+        <div class="metric-sub">Both overlays share this outer-iteration range.</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Shorter Series Behavior</div>
+        <div class="metric-value">Stops at 10</div>
+        <div class="metric-sub">No synthetic points are added after the last observed outer iteration.</div>
+      </div>
+    </div>
+
+    
+    <section class="card">
+      <h2>Total YCSB runtime by outer iteration</h2>
+      <p class="subtitle">Per outer iteration, this is load runtime plus run runtime.</p>
+      <svg viewBox="0 0 1080 380" role="img" aria-label="Total YCSB runtime by outer iteration">
+        <rect x="0" y="0" width="1080" height="380" rx="18" fill="#ffffff" />
+        <text x="540.0" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2a36">
+          Total YCSB runtime by outer iteration
+        </text>
+        <text x="540.0" y="42" text-anchor="middle" font-size="12" fill="#5e6c7b">
+          Y-axis uses YCSB [OVERALL], RunTime(ms), converted to seconds.
+        </text>
+        <line x1="84" y1="304.0" x2="1052" y2="304.0" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="308.0" text-anchor="end" font-size="12" fill="#425466">0.0s</text><line x1="84" y1="254.4" x2="1052" y2="254.4" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="258.4" text-anchor="end" font-size="12" fill="#425466">46.2s</text><line x1="84" y1="204.8" x2="1052" y2="204.8" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="208.8" text-anchor="end" font-size="12" fill="#425466">92.4s</text><line x1="84" y1="155.2" x2="1052" y2="155.2" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="159.2" text-anchor="end" font-size="12" fill="#425466">138.6s</text><line x1="84" y1="105.6" x2="1052" y2="105.6" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="109.6" text-anchor="end" font-size="12" fill="#425466">184.8s</text><line x1="84" y1="56.0" x2="1052" y2="56.0" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="60.0" text-anchor="end" font-size="12" fill="#425466">231.0s</text><line x1="84.0" y1="56" x2="84.0" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="84.0" y="326.0" text-anchor="middle" font-size="11" fill="#516273">1</text><line x1="134.9" y1="56" x2="134.9" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="134.9" y="326.0" text-anchor="middle" font-size="11" fill="#516273">2</text><line x1="185.9" y1="56" x2="185.9" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="185.9" y="326.0" text-anchor="middle" font-size="11" fill="#516273">3</text><line x1="236.8" y1="56" x2="236.8" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="236.8" y="326.0" text-anchor="middle" font-size="11" fill="#516273">4</text><line x1="287.8" y1="56" x2="287.8" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="287.8" y="326.0" text-anchor="middle" font-size="11" fill="#516273">5</text><line x1="338.7" y1="56" x2="338.7" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="338.7" y="326.0" text-anchor="middle" font-size="11" fill="#516273">6</text><line x1="389.7" y1="56" x2="389.7" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="389.7" y="326.0" text-anchor="middle" font-size="11" fill="#516273">7</text><line x1="440.6" y1="56" x2="440.6" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="440.6" y="326.0" text-anchor="middle" font-size="11" fill="#516273">8</text><line x1="491.6" y1="56" x2="491.6" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="491.6" y="326.0" text-anchor="middle" font-size="11" fill="#516273">9</text><line x1="542.5" y1="56" x2="542.5" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="542.5" y="326.0" text-anchor="middle" font-size="11" fill="#516273">10</text><line x1="593.5" y1="56" x2="593.5" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="593.5" y="326.0" text-anchor="middle" font-size="11" fill="#516273">11</text><line x1="644.4" y1="56" x2="644.4" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="644.4" y="326.0" text-anchor="middle" font-size="11" fill="#516273">12</text><line x1="695.4" y1="56" x2="695.4" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="695.4" y="326.0" text-anchor="middle" font-size="11" fill="#516273">13</text><line x1="746.3" y1="56" x2="746.3" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="746.3" y="326.0" text-anchor="middle" font-size="11" fill="#516273">14</text><line x1="797.3" y1="56" x2="797.3" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="797.3" y="326.0" text-anchor="middle" font-size="11" fill="#516273">15</text><line x1="848.2" y1="56" x2="848.2" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="848.2" y="326.0" text-anchor="middle" font-size="11" fill="#516273">16</text><line x1="899.2" y1="56" x2="899.2" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="899.2" y="326.0" text-anchor="middle" font-size="11" fill="#516273">17</text><line x1="950.1" y1="56" x2="950.1" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="950.1" y="326.0" text-anchor="middle" font-size="11" fill="#516273">18</text><line x1="1001.1" y1="56" x2="1001.1" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="1001.1" y="326.0" text-anchor="middle" font-size="11" fill="#516273">19</text><line x1="1052.0" y1="56" x2="1052.0" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="1052.0" y="326.0" text-anchor="middle" font-size="11" fill="#516273">20</text>
+        <line x1="84" y1="304" x2="1052"
+              y2="304" stroke="#3a4856" stroke-width="1.4" />
+        <line x1="84" y1="56" x2="84"
+              y2="304" stroke="#3a4856" stroke-width="1.4" />
+        <path d="M 84.0 91.4 L 134.9 113.1 L 185.9 115.8 L 236.8 118.0 L 287.8 121.2 L 338.7 122.6 L 389.7 119.1 L 440.6 120.7 L 491.6 120.3 L 542.5 120.2 L 593.5 117.9 L 644.4 118.9 L 695.4 121.4 L 746.3 121.5 L 797.3 116.5 L 848.2 114.6 L 899.2 118.3 L 950.1 113.0 L 1001.1 115.8 L 1052.0 116.3" fill="none" stroke="#1f77b4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><circle cx="84.0" cy="91.4" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=1, Total YCSB runtime in seconds=198.036s</title></circle><circle cx="134.9" cy="113.1" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=2, Total YCSB runtime in seconds=177.768s</title></circle><circle cx="185.9" cy="115.8" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=3, Total YCSB runtime in seconds=175.316s</title></circle><circle cx="236.8" cy="118.0" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=4, Total YCSB runtime in seconds=173.260s</title></circle><circle cx="287.8" cy="121.2" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=5, Total YCSB runtime in seconds=170.277s</title></circle><circle cx="338.7" cy="122.6" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=6, Total YCSB runtime in seconds=168.930s</title></circle><circle cx="389.7" cy="119.1" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=7, Total YCSB runtime in seconds=172.195s</title></circle><circle cx="440.6" cy="120.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=8, Total YCSB runtime in seconds=170.685s</title></circle><circle cx="491.6" cy="120.3" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=9, Total YCSB runtime in seconds=171.112s</title></circle><circle cx="542.5" cy="120.2" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=10, Total YCSB runtime in seconds=171.156s</title></circle><circle cx="593.5" cy="117.9" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=11, Total YCSB runtime in seconds=173.345s</title></circle><circle cx="644.4" cy="118.9" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=12, Total YCSB runtime in seconds=172.388s</title></circle><circle cx="695.4" cy="121.4" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=13, Total YCSB runtime in seconds=170.064s</title></circle><circle cx="746.3" cy="121.5" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=14, Total YCSB runtime in seconds=170.012s</title></circle><circle cx="797.3" cy="116.5" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=15, Total YCSB runtime in seconds=174.599s</title></circle><circle cx="848.2" cy="114.6" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=16, Total YCSB runtime in seconds=176.355s</title></circle><circle cx="899.2" cy="118.3" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=17, Total YCSB runtime in seconds=172.988s</title></circle><circle cx="950.1" cy="113.0" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=18, Total YCSB runtime in seconds=177.872s</title></circle><circle cx="1001.1" cy="115.8" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=19, Total YCSB runtime in seconds=175.290s</title></circle><circle cx="1052.0" cy="116.3" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=20, Total YCSB runtime in seconds=174.824s</title></circle><text x="1046.0" y="106.3" font-size="12" font-weight="700" fill="#1f77b4">always 174.824s</text><path d="M 84.0 74.4 L 134.9 104.0 L 185.9 110.8 L 236.8 111.6 L 287.8 110.7 L 338.7 110.8 L 389.7 113.6 L 440.6 114.3 L 491.6 112.9 L 542.5 114.8" fill="none" stroke="#d62728" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><circle cx="84.0" cy="74.4" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=1, Total YCSB runtime in seconds=213.870s</title></circle><circle cx="134.9" cy="104.0" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=2, Total YCSB runtime in seconds=186.258s</title></circle><circle cx="185.9" cy="110.8" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=3, Total YCSB runtime in seconds=179.957s</title></circle><circle cx="236.8" cy="111.6" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=4, Total YCSB runtime in seconds=179.224s</title></circle><circle cx="287.8" cy="110.7" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=5, Total YCSB runtime in seconds=180.067s</title></circle><circle cx="338.7" cy="110.8" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=6, Total YCSB runtime in seconds=179.951s</title></circle><circle cx="389.7" cy="113.6" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=7, Total YCSB runtime in seconds=177.317s</title></circle><circle cx="440.6" cy="114.3" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=8, Total YCSB runtime in seconds=176.686s</title></circle><circle cx="491.6" cy="112.9" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=9, Total YCSB runtime in seconds=177.958s</title></circle><circle cx="542.5" cy="114.8" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=10, Total YCSB runtime in seconds=176.197s</title></circle><text x="552.5" y="90.8" font-size="12" font-weight="700" fill="#d62728">never 176.197s</text>
+        <rect x="92" y="12" width="14" height="14" rx="3" fill="#1f77b4" /><text x="114" y="23" font-size="12" fill="#243447">always</text><rect x="92" y="32" width="14" height="14" rx="3" fill="#d62728" /><text x="114" y="43" font-size="12" fill="#243447">never</text>
+        <text x="540.0" y="364" text-anchor="middle" font-size="12" fill="#425466">
+          Outer iteration
+        </text>
+        <text transform="translate(18 190.0) rotate(-90)" text-anchor="middle"
+              font-size="12" fill="#425466">
+          Total YCSB runtime in seconds
+        </text>
+      </svg>
+    </section>
+    
+
+    
+    <section class="card">
+      <h2>Load YCSB runtime by outer iteration</h2>
+      <p class="subtitle">Per outer iteration, this is the YCSB load-phase [OVERALL] runtime.</p>
+      <svg viewBox="0 0 1080 380" role="img" aria-label="Load YCSB runtime by outer iteration">
+        <rect x="0" y="0" width="1080" height="380" rx="18" fill="#ffffff" />
+        <text x="540.0" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2a36">
+          Load YCSB runtime by outer iteration
+        </text>
+        <text x="540.0" y="42" text-anchor="middle" font-size="12" fill="#5e6c7b">
+          Y-axis uses YCSB [OVERALL], RunTime(ms), converted to seconds.
+        </text>
+        <line x1="84" y1="304.0" x2="1052" y2="304.0" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="308.0" text-anchor="end" font-size="12" fill="#425466">0.0s</text><line x1="84" y1="254.4" x2="1052" y2="254.4" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="258.4" text-anchor="end" font-size="12" fill="#425466">8.3s</text><line x1="84" y1="204.8" x2="1052" y2="204.8" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="208.8" text-anchor="end" font-size="12" fill="#425466">16.6s</text><line x1="84" y1="155.2" x2="1052" y2="155.2" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="159.2" text-anchor="end" font-size="12" fill="#425466">24.9s</text><line x1="84" y1="105.6" x2="1052" y2="105.6" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="109.6" text-anchor="end" font-size="12" fill="#425466">33.2s</text><line x1="84" y1="56.0" x2="1052" y2="56.0" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="60.0" text-anchor="end" font-size="12" fill="#425466">41.4s</text><line x1="84.0" y1="56" x2="84.0" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="84.0" y="326.0" text-anchor="middle" font-size="11" fill="#516273">1</text><line x1="134.9" y1="56" x2="134.9" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="134.9" y="326.0" text-anchor="middle" font-size="11" fill="#516273">2</text><line x1="185.9" y1="56" x2="185.9" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="185.9" y="326.0" text-anchor="middle" font-size="11" fill="#516273">3</text><line x1="236.8" y1="56" x2="236.8" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="236.8" y="326.0" text-anchor="middle" font-size="11" fill="#516273">4</text><line x1="287.8" y1="56" x2="287.8" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="287.8" y="326.0" text-anchor="middle" font-size="11" fill="#516273">5</text><line x1="338.7" y1="56" x2="338.7" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="338.7" y="326.0" text-anchor="middle" font-size="11" fill="#516273">6</text><line x1="389.7" y1="56" x2="389.7" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="389.7" y="326.0" text-anchor="middle" font-size="11" fill="#516273">7</text><line x1="440.6" y1="56" x2="440.6" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="440.6" y="326.0" text-anchor="middle" font-size="11" fill="#516273">8</text><line x1="491.6" y1="56" x2="491.6" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="491.6" y="326.0" text-anchor="middle" font-size="11" fill="#516273">9</text><line x1="542.5" y1="56" x2="542.5" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="542.5" y="326.0" text-anchor="middle" font-size="11" fill="#516273">10</text><line x1="593.5" y1="56" x2="593.5" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="593.5" y="326.0" text-anchor="middle" font-size="11" fill="#516273">11</text><line x1="644.4" y1="56" x2="644.4" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="644.4" y="326.0" text-anchor="middle" font-size="11" fill="#516273">12</text><line x1="695.4" y1="56" x2="695.4" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="695.4" y="326.0" text-anchor="middle" font-size="11" fill="#516273">13</text><line x1="746.3" y1="56" x2="746.3" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="746.3" y="326.0" text-anchor="middle" font-size="11" fill="#516273">14</text><line x1="797.3" y1="56" x2="797.3" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="797.3" y="326.0" text-anchor="middle" font-size="11" fill="#516273">15</text><line x1="848.2" y1="56" x2="848.2" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="848.2" y="326.0" text-anchor="middle" font-size="11" fill="#516273">16</text><line x1="899.2" y1="56" x2="899.2" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="899.2" y="326.0" text-anchor="middle" font-size="11" fill="#516273">17</text><line x1="950.1" y1="56" x2="950.1" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="950.1" y="326.0" text-anchor="middle" font-size="11" fill="#516273">18</text><line x1="1001.1" y1="56" x2="1001.1" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="1001.1" y="326.0" text-anchor="middle" font-size="11" fill="#516273">19</text><line x1="1052.0" y1="56" x2="1052.0" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="1052.0" y="326.0" text-anchor="middle" font-size="11" fill="#516273">20</text>
+        <line x1="84" y1="304" x2="1052"
+              y2="304" stroke="#3a4856" stroke-width="1.4" />
+        <line x1="84" y1="56" x2="84"
+              y2="304" stroke="#3a4856" stroke-width="1.4" />
+        <path d="M 84.0 138.3 L 134.9 125.9 L 185.9 114.7 L 236.8 119.9 L 287.8 118.2 L 338.7 121.5 L 389.7 115.2 L 440.6 123.1 L 491.6 117.9 L 542.5 118.7 L 593.5 118.7 L 644.4 114.0 L 695.4 116.8 L 746.3 116.5 L 797.3 90.9 L 848.2 91.7 L 899.2 82.7 L 950.1 83.4 L 1001.1 84.2 L 1052.0 82.8" fill="none" stroke="#1f77b4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><circle cx="84.0" cy="138.3" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=1, Load YCSB runtime in seconds=27.690s</title></circle><circle cx="134.9" cy="125.9" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=2, Load YCSB runtime in seconds=29.770s</title></circle><circle cx="185.9" cy="114.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=3, Load YCSB runtime in seconds=31.634s</title></circle><circle cx="236.8" cy="119.9" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=4, Load YCSB runtime in seconds=30.771s</title></circle><circle cx="287.8" cy="118.2" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=5, Load YCSB runtime in seconds=31.056s</title></circle><circle cx="338.7" cy="121.5" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=6, Load YCSB runtime in seconds=30.496s</title></circle><circle cx="389.7" cy="115.2" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=7, Load YCSB runtime in seconds=31.555s</title></circle><circle cx="440.6" cy="123.1" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=8, Load YCSB runtime in seconds=30.240s</title></circle><circle cx="491.6" cy="117.9" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=9, Load YCSB runtime in seconds=31.104s</title></circle><circle cx="542.5" cy="118.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=10, Load YCSB runtime in seconds=30.977s</title></circle><circle cx="593.5" cy="118.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=11, Load YCSB runtime in seconds=30.977s</title></circle><circle cx="644.4" cy="114.0" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=12, Load YCSB runtime in seconds=31.749s</title></circle><circle cx="695.4" cy="116.8" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=13, Load YCSB runtime in seconds=31.288s</title></circle><circle cx="746.3" cy="116.5" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=14, Load YCSB runtime in seconds=31.334s</title></circle><circle cx="797.3" cy="90.9" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=15, Load YCSB runtime in seconds=35.623s</title></circle><circle cx="848.2" cy="91.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=16, Load YCSB runtime in seconds=35.476s</title></circle><circle cx="899.2" cy="82.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=17, Load YCSB runtime in seconds=36.981s</title></circle><circle cx="950.1" cy="83.4" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=18, Load YCSB runtime in seconds=36.869s</title></circle><circle cx="1001.1" cy="84.2" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=19, Load YCSB runtime in seconds=36.732s</title></circle><circle cx="1052.0" cy="82.8" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=20, Load YCSB runtime in seconds=36.963s</title></circle><text x="1046.0" y="72.8" font-size="12" font-weight="700" fill="#1f77b4">always 36.963s</text><path d="M 84.0 74.4 L 134.9 76.3 L 185.9 76.8 L 236.8 79.6 L 287.8 81.2 L 338.7 77.6 L 389.7 78.9 L 440.6 78.3 L 491.6 77.7 L 542.5 78.2" fill="none" stroke="#d62728" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><circle cx="84.0" cy="74.4" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=1, Load YCSB runtime in seconds=38.378s</title></circle><circle cx="134.9" cy="76.3" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=2, Load YCSB runtime in seconds=38.055s</title></circle><circle cx="185.9" cy="76.8" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=3, Load YCSB runtime in seconds=37.973s</title></circle><circle cx="236.8" cy="79.6" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=4, Load YCSB runtime in seconds=37.507s</title></circle><circle cx="287.8" cy="81.2" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=5, Load YCSB runtime in seconds=37.239s</title></circle><circle cx="338.7" cy="77.6" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=6, Load YCSB runtime in seconds=37.844s</title></circle><circle cx="389.7" cy="78.9" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=7, Load YCSB runtime in seconds=37.627s</title></circle><circle cx="440.6" cy="78.3" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=8, Load YCSB runtime in seconds=37.716s</title></circle><circle cx="491.6" cy="77.7" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=9, Load YCSB runtime in seconds=37.827s</title></circle><circle cx="542.5" cy="78.2" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=10, Load YCSB runtime in seconds=37.741s</title></circle><text x="552.5" y="54.2" font-size="12" font-weight="700" fill="#d62728">never 37.741s</text>
+        <rect x="92" y="12" width="14" height="14" rx="3" fill="#1f77b4" /><text x="114" y="23" font-size="12" fill="#243447">always</text><rect x="92" y="32" width="14" height="14" rx="3" fill="#d62728" /><text x="114" y="43" font-size="12" fill="#243447">never</text>
+        <text x="540.0" y="364" text-anchor="middle" font-size="12" fill="#425466">
+          Outer iteration
+        </text>
+        <text transform="translate(18 190.0) rotate(-90)" text-anchor="middle"
+              font-size="12" fill="#425466">
+          Load YCSB runtime in seconds
+        </text>
+      </svg>
+    </section>
+    
+
+    
+    <section class="card">
+      <h2>Run YCSB runtime by outer iteration</h2>
+      <p class="subtitle">Per outer iteration, this is the YCSB run-phase [OVERALL] runtime.</p>
+      <svg viewBox="0 0 1080 380" role="img" aria-label="Run YCSB runtime by outer iteration">
+        <rect x="0" y="0" width="1080" height="380" rx="18" fill="#ffffff" />
+        <text x="540.0" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="#1f2a36">
+          Run YCSB runtime by outer iteration
+        </text>
+        <text x="540.0" y="42" text-anchor="middle" font-size="12" fill="#5e6c7b">
+          Y-axis uses YCSB [OVERALL], RunTime(ms), converted to seconds.
+        </text>
+        <line x1="84" y1="304.0" x2="1052" y2="304.0" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="308.0" text-anchor="end" font-size="12" fill="#425466">0.0s</text><line x1="84" y1="254.4" x2="1052" y2="254.4" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="258.4" text-anchor="end" font-size="12" fill="#425466">37.9s</text><line x1="84" y1="204.8" x2="1052" y2="204.8" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="208.8" text-anchor="end" font-size="12" fill="#425466">75.8s</text><line x1="84" y1="155.2" x2="1052" y2="155.2" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="159.2" text-anchor="end" font-size="12" fill="#425466">113.7s</text><line x1="84" y1="105.6" x2="1052" y2="105.6" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="109.6" text-anchor="end" font-size="12" fill="#425466">151.6s</text><line x1="84" y1="56.0" x2="1052" y2="56.0" stroke="#d9e0ea" stroke-width="1" /><text x="72" y="60.0" text-anchor="end" font-size="12" fill="#425466">189.5s</text><line x1="84.0" y1="56" x2="84.0" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="84.0" y="326.0" text-anchor="middle" font-size="11" fill="#516273">1</text><line x1="134.9" y1="56" x2="134.9" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="134.9" y="326.0" text-anchor="middle" font-size="11" fill="#516273">2</text><line x1="185.9" y1="56" x2="185.9" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="185.9" y="326.0" text-anchor="middle" font-size="11" fill="#516273">3</text><line x1="236.8" y1="56" x2="236.8" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="236.8" y="326.0" text-anchor="middle" font-size="11" fill="#516273">4</text><line x1="287.8" y1="56" x2="287.8" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="287.8" y="326.0" text-anchor="middle" font-size="11" fill="#516273">5</text><line x1="338.7" y1="56" x2="338.7" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="338.7" y="326.0" text-anchor="middle" font-size="11" fill="#516273">6</text><line x1="389.7" y1="56" x2="389.7" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="389.7" y="326.0" text-anchor="middle" font-size="11" fill="#516273">7</text><line x1="440.6" y1="56" x2="440.6" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="440.6" y="326.0" text-anchor="middle" font-size="11" fill="#516273">8</text><line x1="491.6" y1="56" x2="491.6" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="491.6" y="326.0" text-anchor="middle" font-size="11" fill="#516273">9</text><line x1="542.5" y1="56" x2="542.5" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="542.5" y="326.0" text-anchor="middle" font-size="11" fill="#516273">10</text><line x1="593.5" y1="56" x2="593.5" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="593.5" y="326.0" text-anchor="middle" font-size="11" fill="#516273">11</text><line x1="644.4" y1="56" x2="644.4" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="644.4" y="326.0" text-anchor="middle" font-size="11" fill="#516273">12</text><line x1="695.4" y1="56" x2="695.4" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="695.4" y="326.0" text-anchor="middle" font-size="11" fill="#516273">13</text><line x1="746.3" y1="56" x2="746.3" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="746.3" y="326.0" text-anchor="middle" font-size="11" fill="#516273">14</text><line x1="797.3" y1="56" x2="797.3" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="797.3" y="326.0" text-anchor="middle" font-size="11" fill="#516273">15</text><line x1="848.2" y1="56" x2="848.2" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="848.2" y="326.0" text-anchor="middle" font-size="11" fill="#516273">16</text><line x1="899.2" y1="56" x2="899.2" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="899.2" y="326.0" text-anchor="middle" font-size="11" fill="#516273">17</text><line x1="950.1" y1="56" x2="950.1" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="950.1" y="326.0" text-anchor="middle" font-size="11" fill="#516273">18</text><line x1="1001.1" y1="56" x2="1001.1" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="1001.1" y="326.0" text-anchor="middle" font-size="11" fill="#516273">19</text><line x1="1052.0" y1="56" x2="1052.0" y2="304" stroke="#eef2f7" stroke-width="1" /><text x="1052.0" y="326.0" text-anchor="middle" font-size="11" fill="#516273">20</text>
+        <line x1="84" y1="304" x2="1052"
+              y2="304" stroke="#3a4856" stroke-width="1.4" />
+        <line x1="84" y1="56" x2="84"
+              y2="304" stroke="#3a4856" stroke-width="1.4" />
+        <path d="M 84.0 81.1 L 134.9 110.3 L 185.9 116.0 L 236.8 117.6 L 287.8 121.8 L 338.7 122.9 L 389.7 120.0 L 440.6 120.2 L 491.6 120.8 L 542.5 120.6 L 593.5 117.7 L 644.4 120.0 L 695.4 122.4 L 746.3 122.5 L 797.3 122.2 L 848.2 119.7 L 899.2 126.0 L 950.1 119.5 L 1001.1 122.7 L 1052.0 123.6" fill="none" stroke="#1f77b4" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><circle cx="84.0" cy="81.1" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=1, Run YCSB runtime in seconds=170.346s</title></circle><circle cx="134.9" cy="110.3" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=2, Run YCSB runtime in seconds=147.998s</title></circle><circle cx="185.9" cy="116.0" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=3, Run YCSB runtime in seconds=143.682s</title></circle><circle cx="236.8" cy="117.6" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=4, Run YCSB runtime in seconds=142.489s</title></circle><circle cx="287.8" cy="121.8" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=5, Run YCSB runtime in seconds=139.221s</title></circle><circle cx="338.7" cy="122.9" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=6, Run YCSB runtime in seconds=138.434s</title></circle><circle cx="389.7" cy="120.0" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=7, Run YCSB runtime in seconds=140.640s</title></circle><circle cx="440.6" cy="120.2" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=8, Run YCSB runtime in seconds=140.445s</title></circle><circle cx="491.6" cy="120.8" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=9, Run YCSB runtime in seconds=140.008s</title></circle><circle cx="542.5" cy="120.6" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=10, Run YCSB runtime in seconds=140.179s</title></circle><circle cx="593.5" cy="117.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=11, Run YCSB runtime in seconds=142.368s</title></circle><circle cx="644.4" cy="120.0" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=12, Run YCSB runtime in seconds=140.639s</title></circle><circle cx="695.4" cy="122.4" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=13, Run YCSB runtime in seconds=138.776s</title></circle><circle cx="746.3" cy="122.5" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=14, Run YCSB runtime in seconds=138.678s</title></circle><circle cx="797.3" cy="122.2" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=15, Run YCSB runtime in seconds=138.976s</title></circle><circle cx="848.2" cy="119.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=16, Run YCSB runtime in seconds=140.879s</title></circle><circle cx="899.2" cy="126.0" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=17, Run YCSB runtime in seconds=136.007s</title></circle><circle cx="950.1" cy="119.5" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=18, Run YCSB runtime in seconds=141.003s</title></circle><circle cx="1001.1" cy="122.7" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=19, Run YCSB runtime in seconds=138.558s</title></circle><circle cx="1052.0" cy="123.6" r="4.2" fill="#1f77b4" stroke="#ffffff" stroke-width="1.2"><title>mode=always, outer_iteration=20, Run YCSB runtime in seconds=137.861s</title></circle><text x="1046.0" y="113.6" font-size="12" font-weight="700" fill="#1f77b4">always 137.861s</text><path d="M 84.0 74.4 L 134.9 110.1 L 185.9 118.2 L 236.8 118.6 L 287.8 117.1 L 338.7 118.1 L 389.7 121.2 L 440.6 122.2 L 491.6 120.6 L 542.5 122.8" fill="none" stroke="#d62728" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" /><circle cx="84.0" cy="74.4" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=1, Run YCSB runtime in seconds=175.492s</title></circle><circle cx="134.9" cy="110.1" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=2, Run YCSB runtime in seconds=148.203s</title></circle><circle cx="185.9" cy="118.2" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=3, Run YCSB runtime in seconds=141.984s</title></circle><circle cx="236.8" cy="118.6" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=4, Run YCSB runtime in seconds=141.717s</title></circle><circle cx="287.8" cy="117.1" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=5, Run YCSB runtime in seconds=142.828s</title></circle><circle cx="338.7" cy="118.1" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=6, Run YCSB runtime in seconds=142.107s</title></circle><circle cx="389.7" cy="121.2" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=7, Run YCSB runtime in seconds=139.690s</title></circle><circle cx="440.6" cy="122.2" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=8, Run YCSB runtime in seconds=138.970s</title></circle><circle cx="491.6" cy="120.6" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=9, Run YCSB runtime in seconds=140.131s</title></circle><circle cx="542.5" cy="122.8" r="4.2" fill="#d62728" stroke="#ffffff" stroke-width="1.2"><title>mode=never, outer_iteration=10, Run YCSB runtime in seconds=138.456s</title></circle><text x="552.5" y="98.8" font-size="12" font-weight="700" fill="#d62728">never 138.456s</text>
+        <rect x="92" y="12" width="14" height="14" rx="3" fill="#1f77b4" /><text x="114" y="23" font-size="12" fill="#243447">always</text><rect x="92" y="32" width="14" height="14" rx="3" fill="#d62728" /><text x="114" y="43" font-size="12" fill="#243447">never</text>
+        <text x="540.0" y="364" text-anchor="middle" font-size="12" fill="#425466">
+          Outer iteration
+        </text>
+        <text transform="translate(18 190.0) rotate(-90)" text-anchor="middle"
+              font-size="12" fill="#425466">
+          Run YCSB runtime in seconds
+        </text>
+      </svg>
+    </section>
+    
+
+    <section class="card"><h2>Parsed outer-iteration runtimes</h2><p class="subtitle">Missing cells mean the shorter log does not have that outer iteration.</p><table><thead><tr><th>Outer Iteration</th><th>always (20260413T021419067720) load</th><th>always (20260413T021419067720) run</th><th>always (20260413T021419067720) total</th><th>never (20260413T013901313762) load</th><th>never (20260413T013901313762) run</th><th>never (20260413T013901313762) total</th></tr></thead><tbody><tr><td>1</td><td>27.690s</td><td>170.346s</td><td>198.036s</td><td>38.378s</td><td>175.492s</td><td>213.870s</td></tr><tr><td>2</td><td>29.770s</td><td>147.998s</td><td>177.768s</td><td>38.055s</td><td>148.203s</td><td>186.258s</td></tr><tr><td>3</td><td>31.634s</td><td>143.682s</td><td>175.316s</td><td>37.973s</td><td>141.984s</td><td>179.957s</td></tr><tr><td>4</td><td>30.771s</td><td>142.489s</td><td>173.260s</td><td>37.507s</td><td>141.717s</td><td>179.224s</td></tr><tr><td>5</td><td>31.056s</td><td>139.221s</td><td>170.277s</td><td>37.239s</td><td>142.828s</td><td>180.067s</td></tr><tr><td>6</td><td>30.496s</td><td>138.434s</td><td>168.930s</td><td>37.844s</td><td>142.107s</td><td>179.951s</td></tr><tr><td>7</td><td>31.555s</td><td>140.640s</td><td>172.195s</td><td>37.627s</td><td>139.690s</td><td>177.317s</td></tr><tr><td>8</td><td>30.240s</td><td>140.445s</td><td>170.685s</td><td>37.716s</td><td>138.970s</td><td>176.686s</td></tr><tr><td>9</td><td>31.104s</td><td>140.008s</td><td>171.112s</td><td>37.827s</td><td>140.131s</td><td>177.958s</td></tr><tr><td>10</td><td>30.977s</td><td>140.179s</td><td>171.156s</td><td>37.741s</td><td>138.456s</td><td>176.197s</td></tr><tr><td>11</td><td>30.977s</td><td>142.368s</td><td>173.345s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>12</td><td>31.749s</td><td>140.639s</td><td>172.388s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>13</td><td>31.288s</td><td>138.776s</td><td>170.064s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>14</td><td>31.334s</td><td>138.678s</td><td>170.012s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>15</td><td>35.623s</td><td>138.976s</td><td>174.599s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>16</td><td>35.476s</td><td>140.879s</td><td>176.355s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>17</td><td>36.981s</td><td>136.007s</td><td>172.988s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>18</td><td>36.869s</td><td>141.003s</td><td>177.872s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>19</td><td>36.732s</td><td>138.558s</td><td>175.290s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr><tr><td>20</td><td>36.963s</td><td>137.861s</td><td>174.824s</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td><td class="empty">&mdash;</td></tr></tbody></table></section>
+  </main>
+</body>
+</html>

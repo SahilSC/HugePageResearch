@@ -1,0 +1,914 @@
+[
+  {
+    "row_index": 0,
+    "thp_mode": "never",
+    "row_type": "base_pages",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      120.11422523506917,
+      114.76409816602245,
+      116.92284878506325
+    ],
+    "runtime_mean": 117.26705739538495,
+    "runtime_std": 2.6916211823548486,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_events_total": 0,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_syscall_attempts_total": 0,
+    "split_max_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "observed_max_attempts": 0,
+    "expected_split_events": 0,
+    "split_success_rate_pct": null,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "base_pages",
+    "runtime_delta_vs_no_break": 4.1610848545096815,
+    "runtime_pct_vs_no_break": 3.678925843642711
+  },
+  {
+    "row_index": 1,
+    "thp_mode": "always",
+    "row_type": "no_break",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      112.89990010089241,
+      114.13543779379688,
+      112.28257972793654
+    ],
+    "runtime_mean": 113.10597254087527,
+    "runtime_std": 0.9434617856311428,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_events_total": 0,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_syscall_attempts_total": 0,
+    "split_max_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "observed_max_attempts": 0,
+    "expected_split_events": 0,
+    "split_success_rate_pct": null,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "no_break",
+    "runtime_delta_vs_no_break": 0.0,
+    "runtime_pct_vs_no_break": 0.0
+  },
+  {
+    "row_index": 2,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user2351990715801970311",
+    "access_count": 1335,
+    "runtime_samples": [
+      113.79642873490229,
+      122.07677574502304,
+      116.1574939021375
+    ],
+    "runtime_mean": 117.34356612735428,
+    "runtime_std": 4.265690113519372,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 1,
+    "random_rank": null,
+    "short_label": "hot#1 (3/3)",
+    "runtime_delta_vs_no_break": 4.237593586479008,
+    "runtime_pct_vs_no_break": 3.7465692494245584
+  },
+  {
+    "row_index": 3,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user8621025099142059187",
+    "access_count": 642,
+    "runtime_samples": [
+      104.84739743499085,
+      116.84234707895666,
+      121.04557771980762
+    ],
+    "runtime_mean": 114.24510741125171,
+    "runtime_std": 8.40562321029689,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 2,
+    "random_rank": null,
+    "short_label": "hot#2 (0/3)",
+    "runtime_delta_vs_no_break": 1.139134870376438,
+    "runtime_pct_vs_no_break": 1.0071394505402953
+  },
+  {
+    "row_index": 4,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user2390393595058248558",
+    "access_count": 530,
+    "runtime_samples": [
+      112.16145250899717,
+      111.34605690906756,
+      121.52473034197465
+    ],
+    "runtime_mean": 115.01074658667979,
+    "runtime_std": 5.655988487371601,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 3,
+    "random_rank": null,
+    "short_label": "hot#3 (0/3)",
+    "runtime_delta_vs_no_break": 1.9047740458045155,
+    "runtime_pct_vs_no_break": 1.6840614186984348
+  },
+  {
+    "row_index": 5,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user6636553130839969302",
+    "access_count": 373,
+    "runtime_samples": [
+      109.54872831492685,
+      113.92753784288652,
+      112.7938344979193
+    ],
+    "runtime_mean": 112.09003355191089,
+    "runtime_std": 2.272662546274603,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 4,
+    "random_rank": null,
+    "short_label": "hot#4 (0/3)",
+    "runtime_delta_vs_no_break": -1.015938988964379,
+    "runtime_pct_vs_no_break": -0.8982186936213554
+  },
+  {
+    "row_index": 6,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user317048932254693363",
+    "access_count": 307,
+    "runtime_samples": [
+      108.66264521609992,
+      112.3376633960288,
+      124.73308288608678
+    ],
+    "runtime_mean": 115.2444638327385,
+    "runtime_std": 8.42032412145607,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 5,
+    "random_rank": null,
+    "short_label": "hot#5 (0/3)",
+    "runtime_delta_vs_no_break": 2.1384912918632324,
+    "runtime_pct_vs_no_break": 1.8906970550033542
+  },
+  {
+    "row_index": 7,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user5938475048244035132",
+    "access_count": 269,
+    "runtime_samples": [
+      114.59242306696251,
+      118.4986437750049,
+      117.63668138696812
+    ],
+    "runtime_mean": 116.90924940964517,
+    "runtime_std": 2.0521959010310793,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 6,
+    "random_rank": null,
+    "short_label": "hot#6 (3/3)",
+    "runtime_delta_vs_no_break": 3.803276868769899,
+    "runtime_pct_vs_no_break": 3.362578282411599
+  },
+  {
+    "row_index": 8,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user4323410974463024952",
+    "access_count": 235,
+    "runtime_samples": [
+      121.45524663501419,
+      109.71819755714387,
+      120.25330529012717
+    ],
+    "runtime_mean": 117.14224982742842,
+    "runtime_std": 6.457443753767818,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 7,
+    "random_rank": null,
+    "short_label": "hot#7 (0/3)",
+    "runtime_delta_vs_no_break": 4.036277286553144,
+    "runtime_pct_vs_no_break": 3.568580151763845
+  },
+  {
+    "row_index": 9,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user5267642368719093717",
+    "access_count": 182,
+    "runtime_samples": [
+      122.55305064097047,
+      124.1780883630272,
+      127.3663845420815
+    ],
+    "runtime_mean": 124.69917451535973,
+    "runtime_std": 2.448610604916742,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 8,
+    "random_rank": null,
+    "short_label": "hot#8 (3/3)",
+    "runtime_delta_vs_no_break": 11.593201974484458,
+    "runtime_pct_vs_no_break": 10.249858353231357
+  },
+  {
+    "row_index": 10,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user2144571683223468943",
+    "access_count": 159,
+    "runtime_samples": [
+      121.05381647101603,
+      127.8440158138983,
+      114.81808087881655
+    ],
+    "runtime_mean": 121.23863772124362,
+    "runtime_std": 6.5149339524010195,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 9,
+    "random_rank": null,
+    "short_label": "hot#9 (0/3)",
+    "runtime_delta_vs_no_break": 8.132665180368349,
+    "runtime_pct_vs_no_break": 7.190305690912391
+  },
+  {
+    "row_index": 11,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user8125243236669674938",
+    "access_count": 145,
+    "runtime_samples": [
+      119.70361024490558,
+      118.60039479588158,
+      116.79005675995722
+    ],
+    "runtime_mean": 118.3646872669148,
+    "runtime_std": 1.4710088398178967,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 10,
+    "random_rank": null,
+    "short_label": "hot#10 (3/3)",
+    "runtime_delta_vs_no_break": 5.258714726039528,
+    "runtime_pct_vs_no_break": 4.649369620281618
+  },
+  {
+    "row_index": 12,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user8357566562958791958",
+    "access_count": 130,
+    "runtime_samples": [
+      106.94235030002892,
+      112.16755051002838,
+      111.79208383103833
+    ],
+    "runtime_mean": 110.30066154703188,
+    "runtime_std": 2.9144355595154026,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 11,
+    "random_rank": null,
+    "short_label": "hot#11 (0/3)",
+    "runtime_delta_vs_no_break": -2.805310993843392,
+    "runtime_pct_vs_no_break": -2.4802500971640384
+  },
+  {
+    "row_index": 13,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user405020020949719660",
+    "access_count": 109,
+    "runtime_samples": [
+      122.73918868997134,
+      118.87132754712366,
+      109.24691061791964
+    ],
+    "runtime_mean": 116.95247561833821,
+    "runtime_std": 6.947797236307672,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 12,
+    "random_rank": null,
+    "short_label": "hot#12 (3/3)",
+    "runtime_delta_vs_no_break": 3.846503077462941,
+    "runtime_pct_vs_no_break": 3.4007957237385034
+  },
+  {
+    "row_index": 14,
+    "thp_mode": "always",
+    "row_type": "random_split_only",
+    "key": "user3437113317267471800",
+    "access_count": 2,
+    "runtime_samples": [
+      112.35256486502476,
+      118.56601837906055,
+      117.42034837510437
+    ],
+    "runtime_mean": 116.11297720639656,
+    "runtime_std": 3.30660939216401,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": null,
+    "random_rank": 1,
+    "short_label": "rand#1 (3/3)",
+    "runtime_delta_vs_no_break": 3.0070046655212934,
+    "runtime_pct_vs_no_break": 2.6585728392323427
+  },
+  {
+    "row_index": 15,
+    "thp_mode": "always",
+    "row_type": "random_split_only",
+    "key": "user3540491433731367504",
+    "access_count": 1,
+    "runtime_samples": [
+      126.01221260381863,
+      109.84658570797183,
+      114.2908414278645
+    ],
+    "runtime_mean": 116.71654657988499,
+    "runtime_std": 8.351341649539634,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": null,
+    "random_rank": 2,
+    "short_label": "rand#2 (0/3)",
+    "runtime_delta_vs_no_break": 3.6105740390097196,
+    "runtime_pct_vs_no_break": 3.1922045829232415
+  }
+]

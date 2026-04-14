@@ -1,0 +1,1433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Exp2 Runtime Live Live Replay Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #08131f;
+    --bg-accent: #11253d;
+    --card: rgba(10, 24, 42, 0.88);
+    --border: rgba(126, 176, 255, 0.18);
+    --text: #eef5ff;
+    --muted: #9eb0c8;
+    --blue: #7caeff;
+    --teal: #58d0b2;
+    --gold: #f3b74d;
+    --red: #ff7080;
+    --shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(124, 174, 255, 0.16), transparent 30%),
+      radial-gradient(circle at top right, rgba(88, 208, 178, 0.14), transparent 28%),
+      linear-gradient(180deg, #08131f 0%, #09121b 64%, #070d15 100%);
+    padding: 28px 20px 36px;
+  }
+  .page {
+    max-width: 1380px;
+    margin: 0 auto;
+  }
+  header { margin-bottom: 24px; }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(124, 174, 255, 0.12);
+    border: 1px solid rgba(124, 174, 255, 0.16);
+    color: #d5e5ff;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  header h1 {
+    margin: 14px 0 10px;
+    font-size: clamp(2rem, 4vw, 3.2rem);
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+  }
+  header p {
+    margin: 0;
+    max-width: 940px;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+  .notice {
+    margin-top: 14px;
+    display: inline-block;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(243, 183, 77, 0.10);
+    border: 1px solid rgba(243, 183, 77, 0.16);
+    color: #ffe9c6;
+    font-size: 0.88rem;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .stat {
+    background: linear-gradient(180deg, rgba(18, 37, 61, 0.96), rgba(10, 23, 40, 0.96));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .stat .label {
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stat .value {
+    margin-top: 10px;
+    font-size: clamp(1.65rem, 3vw, 2.35rem);
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+  .stat .detail {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .card {
+    grid-column: span 6;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 20px 20px 18px;
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow);
+  }
+  .card.full-width {
+    grid-column: 1 / -1;
+  }
+  .card h2 {
+    margin: 0 0 8px;
+    font-size: 1.18rem;
+    line-height: 1.25;
+  }
+  .card .desc {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 0.93rem;
+    line-height: 1.58;
+  }
+  .chart-wrap {
+    position: relative;
+    height: 390px;
+  }
+  .chart-wrap.tall { height: 470px; }
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .kv-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .kv {
+    background: rgba(17, 36, 61, 0.72);
+    border: 1px solid rgba(135, 178, 255, 0.12);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .kv .label {
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .kv .value {
+    margin-top: 8px;
+    font-size: 0.96rem;
+    line-height: 1.5;
+  }
+  .story-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .story {
+    background: rgba(17, 36, 61, 0.72);
+    border: 1px solid rgba(135, 178, 255, 0.12);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .story strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #ffffff;
+    font-size: 0.96rem;
+  }
+  .story p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .mono {
+    font-family: "SFMono-Regular", ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.84rem;
+    color: #dfe9ff;
+    word-break: break-word;
+  }
+  .pre-wrap {
+    white-space: pre-wrap;
+  }
+  table.summary {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+  table.summary th, table.summary td {
+    padding: 12px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(135, 178, 255, 0.10);
+    vertical-align: top;
+  }
+  table.summary th {
+    color: #d7e3f7;
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 9px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+  }
+  .badge.complete {
+    color: #d8fff3;
+    background: rgba(88, 208, 178, 0.14);
+  }
+  .badge.progress {
+    color: #ffeccc;
+    background: rgba(243, 183, 77, 0.14);
+  }
+  .badge.pending {
+    color: #dce8ff;
+    background: rgba(124, 174, 255, 0.14);
+  }
+  footer {
+    margin-top: 20px;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+  }
+  @media (max-width: 1180px) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { grid-column: 1 / -1; }
+  }
+  @media (max-width: 720px) {
+    body { padding: 20px 14px 28px; }
+    .stats, .kv-grid, .story-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <span class="eyebrow">Log-Only Live View</span>
+    <h1>Exp2 Runtime Live Live Replay Dashboard</h1>
+    <p>
+      This page is built from the in-progress replay session log, the accepted
+      breakpoint matrix, and the accepted monitor trace. It is intentionally a
+      live preview, not a final parquet-backed result page.
+    </p>
+    <div class="notice">
+      Split outcomes and split attempts are inferred from log lines. Final
+      parquet numbers may differ slightly once the replay finishes.
+    </div>
+  </header>
+
+  <section class="stats">
+    <div class="stat">
+      <div class="label">Run Progress</div>
+      <div class="value" id="progressValue">--</div>
+      <div class="detail" id="progressDetail">--</div>
+    </div>
+    <div class="stat">
+      <div class="label">Current Stage</div>
+      <div class="value" id="currentStageValue">--</div>
+      <div class="detail" id="currentStageDetail">--</div>
+    </div>
+    <div class="stat">
+      <div class="label">Base vs No Break</div>
+      <div class="value" id="baseVsNoBreakValue">--</div>
+      <div class="detail" id="baseVsNoBreakDetail">--</div>
+    </div>
+    <div class="stat">
+      <div class="label">Split Outcomes</div>
+      <div class="value" id="splitOutcomeValue">--</div>
+      <div class="detail" id="splitOutcomeDetail">--</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <article class="card">
+      <h2>Section 1 — Percent Change Vs no_break</h2>
+      <p class="desc">
+        Mean percent change versus <code>no_break</code> using only completed
+        runs so far. Error bars show the current standard deviation in
+        percentage points.
+      </p>
+      <div class="chart-wrap tall">
+        <canvas id="deltaChart"></canvas>
+      </div>
+    </article>
+
+    <article class="card">
+      <h2>Section 2 — Full Run Times So Far</h2>
+      <p class="desc">
+        Mean runtime in seconds using the completed runs available so far.
+        Error bars show the current standard deviation in seconds.
+      </p>
+      <div class="chart-wrap tall">
+        <canvas id="runtimeChart"></canvas>
+      </div>
+    </article>
+
+    <article class="card full-width">
+      <h2>Section 3 — Split Outcomes So Far</h2>
+      <p class="desc">
+        Inferred split successes and failures for completed split-only runs. A
+        row can still change while the replay is running.
+      </p>
+      <div class="chart-wrap tall">
+        <canvas id="splitChart"></canvas>
+      </div>
+    </article>
+
+    <article class="card full-width">
+      <h2>Section 4 — Live Story</h2>
+      <p class="desc">
+        These callouts summarize what the current session log already tells us.
+      </p>
+      <div class="story-grid" id="storyGrid"></div>
+    </article>
+
+    <article class="card full-width">
+      <h2>Section 5 — Config And Limits</h2>
+      <p class="desc">
+        Exact configuration when it is available from the surrounding artifacts,
+        plus the limitations of a log-only view.
+      </p>
+      <div class="kv-grid" id="configGrid"></div>
+    </article>
+
+    <article class="card full-width">
+      <h2>Section 6 — Row Summary</h2>
+      <p class="desc">
+        Every row from the breakpoint matrix, including pending rows that do not
+        have completed timings yet. The row summary includes both the current
+        mean runtime and every completed runtime sample seen so far.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="summary">
+          <thead>
+            <tr>
+              <th>Label</th>
+              <th>Status</th>
+              <th>Key</th>
+              <th>Accesses</th>
+              <th>THP</th>
+              <th>Runs</th>
+              <th>Run Times</th>
+              <th>Mean Runtime</th>
+              <th>% vs no_break</th>
+              <th>Std (pct pts)</th>
+              <th>Split</th>
+              <th>Warning</th>
+            </tr>
+          </thead>
+          <tbody id="rowsTableBody"></tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+
+  <footer id="footerText"></footer>
+</div>
+
+<script id="liveLogMetricsData" type="application/json">
+{
+  "experiment_name": "Exp2 Runtime Live",
+  "workload_label": "80% read / 20% delete",
+  "session_log_path": "data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_full_session.log",
+  "breakpoints_path": "data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_breakpoints_16rows.parquet",
+  "trace_path": "data/redis_traces/exp2_read80_delete20_delEqHalfRecord_2122_2min3_monitor_run.log",
+  "report_path": "reports/collector/replay_exp2_2026-04-09.md",
+  "generated_at_utc": "2026-04-09T20:48:33Z",
+  "session_log_mtime_utc": "2026-04-09T20:47:17Z",
+  "observed_rows": 16,
+  "observed_row_total_from_log": 16,
+  "runs_per_row": 3,
+  "expected_runs": 48,
+  "completed_runs": 44,
+  "progress_pct": 91.66666666666666,
+  "completed_rows": 14,
+  "started_rows": 15,
+  "pending_rows": 1,
+  "hot_keys": 12,
+  "random_rows": 2,
+  "base_pages_runtime_s": 117.267,
+  "no_break_runtime_s": 113.106,
+  "base_pages_pct_vs_no_break": 3.6788499283857634,
+  "runtime_min_s": 104.847,
+  "runtime_max_s": 127.844,
+  "runtime_mean_s": 116.37863636363636,
+  "commands_mean": 37063.0,
+  "inferred_split_successes": 17,
+  "inferred_split_failures": 21,
+  "split_rows_with_failures": 7,
+  "rows_with_samples": 15,
+  "current_row_label": "row 15/16 run 3/3",
+  "current_stage": "timing",
+  "last_line": "INFO: [15/16 run 3/3] Timing run trace ...",
+  "estimated_remaining_seconds": 465.51454545454544,
+  "limitations": [
+    "This is a log-only live view. The final result parquet is not available yet.",
+    "Split successes, failures, and attempt counts are inferred from the session log and the one-split-per-row matrix layout.",
+    "Exact full-run record_count and operation_count were not recoverable from the current live artifacts."
+  ]
+}
+</script>
+<script id="liveLogRowsData" type="application/json">
+[
+  {
+    "row_index": 0,
+    "row_number": 1,
+    "row_type": "base_pages",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      120.114,
+      114.764,
+      116.923
+    ],
+    "runtime_mean": 117.267,
+    "runtime_std": 2.691538036142165,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "never",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 0,
+    "inferred_split_success_rate_pct": null,
+    "inferred_split_success_ratio_total": null,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 0,
+    "observed_max_attempts": 0,
+    "warning_messages": [],
+    "latest_warning": null,
+    "short_label": "base_pages",
+    "hot_rank": null,
+    "random_rank": null,
+    "runtime_delta_vs_no_break": 4.161000000000001,
+    "runtime_pct_vs_no_break": 3.6788499283857634,
+    "runtime_std_pct_vs_no_break": 2.379659820117558
+  },
+  {
+    "row_index": 1,
+    "row_number": 2,
+    "row_type": "no_break",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      112.9,
+      114.135,
+      112.283
+    ],
+    "runtime_mean": 113.106,
+    "runtime_std": 0.9430286315907928,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 0,
+    "inferred_split_success_rate_pct": null,
+    "inferred_split_success_ratio_total": null,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 0,
+    "observed_max_attempts": 0,
+    "warning_messages": [],
+    "latest_warning": null,
+    "short_label": "no_break",
+    "hot_rank": null,
+    "random_rank": null,
+    "runtime_delta_vs_no_break": 0.0,
+    "runtime_pct_vs_no_break": 0.0,
+    "runtime_std_pct_vs_no_break": 0.833756504156095
+  },
+  {
+    "row_index": 2,
+    "row_number": 3,
+    "row_type": "hot_split_only",
+    "key": "user2351990715801970311",
+    "access_count": 1335,
+    "runtime_samples": [
+      113.796,
+      122.077,
+      116.157
+    ],
+    "runtime_mean": 117.34333333333332,
+    "runtime_std": 4.266061454472181,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 3,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 100.0,
+    "inferred_split_success_ratio_total": 1.0,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 3,
+    "observed_max_attempts": 1,
+    "warning_messages": [],
+    "latest_warning": null,
+    "hot_rank": 1,
+    "random_rank": null,
+    "short_label": "hot#1 (3/3)",
+    "runtime_delta_vs_no_break": 4.237333333333325,
+    "runtime_pct_vs_no_break": 3.7463382431819126,
+    "runtime_std_pct_vs_no_break": 3.7717375333511765
+  },
+  {
+    "row_index": 3,
+    "row_number": 4,
+    "row_type": "hot_split_only",
+    "key": "user8621025099142059187",
+    "access_count": 642,
+    "runtime_samples": [
+      104.847,
+      116.842,
+      121.046
+    ],
+    "runtime_mean": 114.245,
+    "runtime_std": 8.405962586164662,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 3,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 0.0,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 3,
+    "inferred_attempts_total": 6,
+    "observed_max_attempts": 2,
+    "warning_messages": [
+      "WARNING: line 60: break_page failed for key 'user8621025099142059187' at access 0 after 2 attempts: pid=1228149 vaddr=0x7ffcf2d58009 errno=2 (No such file or directory)",
+      "WARNING: line 60: break_page failed for key 'user8621025099142059187' at access 0 after 2 attempts: pid=1228643 vaddr=0x7ffcf2d58009 errno=2 (No such file or directory)",
+      "WARNING: line 60: break_page failed for key 'user8621025099142059187' at access 0 after 2 attempts: pid=1229383 vaddr=0x7ffcf2d57009 errno=2 (No such file or directory)"
+    ],
+    "latest_warning": "WARNING: line 60: break_page failed for key 'user8621025099142059187' at access 0 after 2 attempts: pid=1229383 vaddr=0x7ffcf2d57009 errno=2 (No such file or directory)",
+    "hot_rank": 2,
+    "random_rank": null,
+    "short_label": "hot#2 (0/3)",
+    "runtime_delta_vs_no_break": 1.13900000000001,
+    "runtime_pct_vs_no_break": 1.0070199635739963,
+    "runtime_std_pct_vs_no_break": 7.431933395367764
+  },
+  {
+    "row_index": 4,
+    "row_number": 5,
+    "row_type": "hot_split_only",
+    "key": "user2390393595058248558",
+    "access_count": 530,
+    "runtime_samples": [
+      112.161,
+      111.346,
+      121.525
+    ],
+    "runtime_mean": 115.01066666666668,
+    "runtime_std": 5.656276189626294,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 3,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 0.0,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 3,
+    "inferred_attempts_total": 6,
+    "observed_max_attempts": 2,
+    "warning_messages": [
+      "WARNING: line 125: break_page failed for key 'user2390393595058248558' at access 0 after 2 attempts: pid=1230272 vaddr=0x7ffd58499009 errno=2 (No such file or directory)",
+      "WARNING: line 125: break_page failed for key 'user2390393595058248558' at access 0 after 2 attempts: pid=1230535 vaddr=0x7ffd58497009 errno=2 (No such file or directory)",
+      "WARNING: line 125: break_page failed for key 'user2390393595058248558' at access 0 after 2 attempts: pid=1231032 vaddr=0x7ffd58497009 errno=2 (No such file or directory)"
+    ],
+    "latest_warning": "WARNING: line 125: break_page failed for key 'user2390393595058248558' at access 0 after 2 attempts: pid=1231032 vaddr=0x7ffd58497009 errno=2 (No such file or directory)",
+    "hot_rank": 3,
+    "random_rank": null,
+    "short_label": "hot#3 (0/3)",
+    "runtime_delta_vs_no_break": 1.9046666666666852,
+    "runtime_pct_vs_no_break": 1.6839660731231554,
+    "runtime_std_pct_vs_no_break": 5.000863075014848
+  },
+  {
+    "row_index": 5,
+    "row_number": 6,
+    "row_type": "hot_split_only",
+    "key": "user6636553130839969302",
+    "access_count": 373,
+    "runtime_samples": [
+      109.549,
+      113.928,
+      112.794
+    ],
+    "runtime_mean": 112.09033333333333,
+    "runtime_std": 2.2727231096931515,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 3,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 0.0,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 3,
+    "inferred_attempts_total": 6,
+    "observed_max_attempts": 2,
+    "warning_messages": [
+      "WARNING: line 12: break_page failed for key 'user6636553130839969302' at access 0 after 2 attempts: pid=1231141 vaddr=0x7ffc45541009 errno=2 (No such file or directory)",
+      "WARNING: line 12: break_page failed for key 'user6636553130839969302' at access 0 after 2 attempts: pid=1231594 vaddr=0x7ffc45548009 errno=2 (No such file or directory)",
+      "WARNING: line 12: break_page failed for key 'user6636553130839969302' at access 0 after 2 attempts: pid=1231698 vaddr=0x7ffc4553a009 errno=2 (No such file or directory)"
+    ],
+    "latest_warning": "WARNING: line 12: break_page failed for key 'user6636553130839969302' at access 0 after 2 attempts: pid=1231698 vaddr=0x7ffc4553a009 errno=2 (No such file or directory)",
+    "hot_rank": 4,
+    "random_rank": null,
+    "short_label": "hot#4 (0/3)",
+    "runtime_delta_vs_no_break": -1.015666666666661,
+    "runtime_pct_vs_no_break": -0.8979777082264939,
+    "runtime_std_pct_vs_no_break": 2.0093744891457144
+  },
+  {
+    "row_index": 6,
+    "row_number": 7,
+    "row_type": "hot_split_only",
+    "key": "user317048932254693363",
+    "access_count": 307,
+    "runtime_samples": [
+      108.663,
+      112.338,
+      124.733
+    ],
+    "runtime_mean": 115.24466666666666,
+    "runtime_std": 8.42008066073796,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 3,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 0.0,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 3,
+    "inferred_attempts_total": 6,
+    "observed_max_attempts": 2,
+    "warning_messages": [
+      "WARNING: line 19: break_page failed for key 'user317048932254693363' at access 0 after 2 attempts: pid=1232175 vaddr=0x7ffc53db3009 errno=2 (No such file or directory)",
+      "WARNING: line 19: break_page failed for key 'user317048932254693363' at access 0 after 2 attempts: pid=1232496 vaddr=0x7ffc53db8009 errno=2 (No such file or directory)",
+      "WARNING: line 19: break_page failed for key 'user317048932254693363' at access 0 after 2 attempts: pid=1232985 vaddr=0x7ffc53db0009 errno=2 (No such file or directory)"
+    ],
+    "latest_warning": "WARNING: line 19: break_page failed for key 'user317048932254693363' at access 0 after 2 attempts: pid=1232985 vaddr=0x7ffc53db0009 errno=2 (No such file or directory)",
+    "hot_rank": 5,
+    "random_rank": null,
+    "short_label": "hot#5 (0/3)",
+    "runtime_delta_vs_no_break": 2.1386666666666656,
+    "runtime_pct_vs_no_break": 1.890851649485148,
+    "runtime_std_pct_vs_no_break": 7.444415557740493
+  },
+  {
+    "row_index": 7,
+    "row_number": 8,
+    "row_type": "hot_split_only",
+    "key": "user5938475048244035132",
+    "access_count": 269,
+    "runtime_samples": [
+      114.592,
+      118.499,
+      117.637
+    ],
+    "runtime_mean": 116.90933333333334,
+    "runtime_std": 2.052629127079056,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 3,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 100.0,
+    "inferred_split_success_ratio_total": 1.0,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 3,
+    "observed_max_attempts": 1,
+    "warning_messages": [],
+    "latest_warning": null,
+    "hot_rank": 6,
+    "random_rank": null,
+    "short_label": "hot#6 (3/3)",
+    "runtime_delta_vs_no_break": 3.8033333333333417,
+    "runtime_pct_vs_no_break": 3.3626273878780477,
+    "runtime_std_pct_vs_no_break": 1.8147835897998836
+  },
+  {
+    "row_index": 8,
+    "row_number": 9,
+    "row_type": "hot_split_only",
+    "key": "user4323410974463024952",
+    "access_count": 235,
+    "runtime_samples": [
+      121.455,
+      109.718,
+      120.253
+    ],
+    "runtime_mean": 117.142,
+    "runtime_std": 6.45740141233298,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 3,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 0.0,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 3,
+    "inferred_attempts_total": 6,
+    "observed_max_attempts": 2,
+    "warning_messages": [
+      "WARNING: line 200: break_page failed for key 'user4323410974463024952' at access 0 after 2 attempts: pid=1234207 vaddr=0x7ffc4fced009 errno=2 (No such file or directory)",
+      "WARNING: line 200: break_page failed for key 'user4323410974463024952' at access 0 after 2 attempts: pid=1234707 vaddr=0x7ffc4fcef009 errno=2 (No such file or directory)",
+      "WARNING: line 200: break_page failed for key 'user4323410974463024952' at access 0 after 2 attempts: pid=1234829 vaddr=0x7ffc4fce7009 errno=2 (No such file or directory)"
+    ],
+    "latest_warning": "WARNING: line 200: break_page failed for key 'user4323410974463024952' at access 0 after 2 attempts: pid=1234829 vaddr=0x7ffc4fce7009 errno=2 (No such file or directory)",
+    "hot_rank": 7,
+    "random_rank": null,
+    "short_label": "hot#7 (0/3)",
+    "runtime_delta_vs_no_break": 4.036000000000001,
+    "runtime_pct_vs_no_break": 3.5683341290470905,
+    "runtime_std_pct_vs_no_break": 5.709159029877266
+  },
+  {
+    "row_index": 9,
+    "row_number": 10,
+    "row_type": "hot_split_only",
+    "key": "user5267642368719093717",
+    "access_count": 182,
+    "runtime_samples": [
+      122.553,
+      124.178,
+      127.366
+    ],
+    "runtime_mean": 124.699,
+    "runtime_std": 2.448432764034987,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 3,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 100.0,
+    "inferred_split_success_ratio_total": 1.0,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 3,
+    "observed_max_attempts": 1,
+    "warning_messages": [],
+    "latest_warning": null,
+    "hot_rank": 8,
+    "random_rank": null,
+    "short_label": "hot#8 (3/3)",
+    "runtime_delta_vs_no_break": 11.593000000000004,
+    "runtime_pct_vs_no_break": 10.249677293865943,
+    "runtime_std_pct_vs_no_break": 2.164724032354594
+  },
+  {
+    "row_index": 10,
+    "row_number": 11,
+    "row_type": "hot_split_only",
+    "key": "user2144571683223468943",
+    "access_count": 159,
+    "runtime_samples": [
+      121.054,
+      127.844,
+      114.818
+    ],
+    "runtime_mean": 121.23866666666667,
+    "runtime_std": 6.5149631874119835,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 3,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 0.0,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 3,
+    "inferred_attempts_total": 6,
+    "observed_max_attempts": 2,
+    "warning_messages": [
+      "WARNING: line 76: break_page failed for key 'user2144571683223468943' at access 0 after 2 attempts: pid=1236174 vaddr=0x7ffccaf23009 errno=2 (No such file or directory)",
+      "WARNING: line 76: break_page failed for key 'user2144571683223468943' at access 0 after 2 attempts: pid=1236652 vaddr=0x7ffccaf2e009 errno=2 (No such file or directory)",
+      "WARNING: line 76: break_page failed for key 'user2144571683223468943' at access 0 after 2 attempts: pid=1237140 vaddr=0x7ffccaf28009 errno=2 (No such file or directory)"
+    ],
+    "latest_warning": "WARNING: line 76: break_page failed for key 'user2144571683223468943' at access 0 after 2 attempts: pid=1237140 vaddr=0x7ffccaf28009 errno=2 (No such file or directory)",
+    "hot_rank": 9,
+    "random_rank": null,
+    "short_label": "hot#9 (0/3)",
+    "runtime_delta_vs_no_break": 8.13266666666668,
+    "runtime_pct_vs_no_break": 7.190305259373231,
+    "runtime_std_pct_vs_no_break": 5.760050914550938
+  },
+  {
+    "row_index": 11,
+    "row_number": 12,
+    "row_type": "hot_split_only",
+    "key": "user8125243236669674938",
+    "access_count": 145,
+    "runtime_samples": [
+      119.704,
+      118.6,
+      116.79
+    ],
+    "runtime_mean": 118.36466666666666,
+    "runtime_std": 1.471185009892812,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 3,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 100.0,
+    "inferred_split_success_ratio_total": 1.0,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 3,
+    "observed_max_attempts": 1,
+    "warning_messages": [],
+    "latest_warning": null,
+    "hot_rank": 10,
+    "random_rank": null,
+    "short_label": "hot#10 (3/3)",
+    "runtime_delta_vs_no_break": 5.25866666666667,
+    "runtime_pct_vs_no_break": 4.6493260009784265,
+    "runtime_std_pct_vs_no_break": 1.3007134987470268
+  },
+  {
+    "row_index": 12,
+    "row_number": 13,
+    "row_type": "hot_split_only",
+    "key": "user8357566562958791958",
+    "access_count": 130,
+    "runtime_samples": [
+      106.942,
+      112.168,
+      111.792
+    ],
+    "runtime_mean": 110.30066666666666,
+    "runtime_std": 2.9147599100669286,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 3,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 0.0,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 3,
+    "inferred_attempts_total": 6,
+    "observed_max_attempts": 2,
+    "warning_messages": [
+      "WARNING: line 33: break_page failed for key 'user8357566562958791958' at access 0 after 2 attempts: pid=1238939 vaddr=0x7ffc1521a009 errno=2 (No such file or directory)",
+      "WARNING: line 33: break_page failed for key 'user8357566562958791958' at access 0 after 2 attempts: pid=1239969 vaddr=0x7ffc1521d009 errno=2 (No such file or directory)",
+      "WARNING: line 33: break_page failed for key 'user8357566562958791958' at access 0 after 2 attempts: pid=1240415 vaddr=0x7ffc1521d009 errno=2 (No such file or directory)"
+    ],
+    "latest_warning": "WARNING: line 33: break_page failed for key 'user8357566562958791958' at access 0 after 2 attempts: pid=1240415 vaddr=0x7ffc1521d009 errno=2 (No such file or directory)",
+    "hot_rank": 11,
+    "random_rank": null,
+    "short_label": "hot#11 (0/3)",
+    "runtime_delta_vs_no_break": -2.805333333333337,
+    "runtime_pct_vs_no_break": -2.4802692459580777,
+    "runtime_std_pct_vs_no_break": 2.5770161707309325
+  },
+  {
+    "row_index": 13,
+    "row_number": 14,
+    "row_type": "hot_split_only",
+    "key": "user405020020949719660",
+    "access_count": 109,
+    "runtime_samples": [
+      122.739,
+      118.871,
+      109.247
+    ],
+    "runtime_mean": 116.95233333333333,
+    "runtime_std": 6.947623862395931,
+    "commands_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 3,
+    "total_runs": 3,
+    "status": "complete",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 3,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 3,
+    "inferred_split_success_rate_pct": 100.0,
+    "inferred_split_success_ratio_total": 1.0,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 3,
+    "observed_max_attempts": 1,
+    "warning_messages": [],
+    "latest_warning": null,
+    "hot_rank": 12,
+    "random_rank": null,
+    "short_label": "hot#12 (3/3)",
+    "runtime_delta_vs_no_break": 3.846333333333334,
+    "runtime_pct_vs_no_break": 3.4006448228505404,
+    "runtime_std_pct_vs_no_break": 6.142577637257025
+  },
+  {
+    "row_index": 14,
+    "row_number": 15,
+    "row_type": "random_split_only",
+    "key": "user3437113317267471800",
+    "access_count": 2,
+    "runtime_samples": [
+      112.353,
+      118.566
+    ],
+    "runtime_mean": 115.45949999999999,
+    "runtime_std": 4.393254431512026,
+    "commands_samples": [
+      37063,
+      37063
+    ],
+    "commands_mean": 37063.0,
+    "thp_mode": "always",
+    "completed_runs": 2,
+    "total_runs": 3,
+    "status": "in_progress",
+    "current_stage": "timing",
+    "current_run_number": 3,
+    "inferred_split_successes": 2,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 2,
+    "inferred_split_success_rate_pct": 100.0,
+    "inferred_split_success_ratio_total": 0.6666666666666666,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 2,
+    "observed_max_attempts": 1,
+    "warning_messages": [],
+    "latest_warning": null,
+    "hot_rank": null,
+    "random_rank": 1,
+    "short_label": "rand#1 (2/3)",
+    "runtime_delta_vs_no_break": 2.353499999999997,
+    "runtime_pct_vs_no_break": 2.080791469948551,
+    "runtime_std_pct_vs_no_break": 3.8841922015737684
+  },
+  {
+    "row_index": 15,
+    "row_number": 16,
+    "row_type": "random_split_only",
+    "key": "user3540491433731367504",
+    "access_count": 1,
+    "runtime_samples": [],
+    "runtime_mean": null,
+    "runtime_std": null,
+    "commands_samples": [],
+    "commands_mean": null,
+    "thp_mode": "always",
+    "completed_runs": 0,
+    "total_runs": 3,
+    "status": "pending",
+    "current_stage": null,
+    "current_run_number": null,
+    "inferred_split_successes": 0,
+    "inferred_split_failures": 0,
+    "completed_split_runs": 0,
+    "inferred_split_success_rate_pct": null,
+    "inferred_split_success_ratio_total": 0.0,
+    "inferred_retry_count_total": 0,
+    "inferred_attempts_total": 0,
+    "observed_max_attempts": 0,
+    "warning_messages": [],
+    "latest_warning": null,
+    "hot_rank": null,
+    "random_rank": 2,
+    "short_label": "rand#2 (0/3)",
+    "runtime_delta_vs_no_break": null,
+    "runtime_pct_vs_no_break": null,
+    "runtime_std_pct_vs_no_break": null
+  }
+]
+</script>
+<script>
+const metrics = JSON.parse(document.getElementById('liveLogMetricsData').textContent);
+const rows = JSON.parse(document.getElementById('liveLogRowsData').textContent);
+
+function formatSeconds(value) {
+  if (value === null || value === undefined) return 'n/a';
+  return `${value.toFixed(3)}s`;
+}
+
+function formatPercent(value) {
+  if (value === null || value === undefined) return 'n/a';
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function formatInteger(value) {
+  if (value === null || value === undefined) return 'n/a';
+  return Number(value).toLocaleString();
+}
+
+function formatRuntimeSamples(values) {
+  if (!Array.isArray(values) || values.length === 0) return '—';
+  return values.map((value, index) => `r${index + 1}: ${formatSeconds(value)}`).join(', ');
+}
+
+function formatEta(seconds) {
+  if (seconds === null || seconds === undefined) return 'n/a';
+  const rounded = Math.max(0, Math.round(seconds));
+  const h = Math.floor(rounded / 3600);
+  const m = Math.floor((rounded % 3600) / 60);
+  const s = rounded % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function barColorForRow(row) {
+  if (row.row_type === 'base_pages') return 'rgba(243, 183, 77, 0.82)';
+  if (row.row_type === 'no_break') return 'rgba(124, 174, 255, 0.82)';
+  if (row.row_type === 'hot_split_only') return 'rgba(88, 208, 178, 0.78)';
+  if (row.row_type === 'random_split_only') return 'rgba(160, 204, 255, 0.78)';
+  return 'rgba(170, 184, 204, 0.78)';
+}
+
+const errorBarPlugin = {
+  id: 'errorBarPlugin',
+  afterDatasetsDraw(chart) {
+    const dataset = chart.data.datasets[0];
+    if (!dataset || !dataset.errorBars) return;
+    const { ctx, scales: { y } } = chart;
+    const meta = chart.getDatasetMeta(0);
+    ctx.save();
+    ctx.lineWidth = 2;
+    meta.data.forEach((bar, index) => {
+      const error = dataset.errorBars[index];
+      if (!error) return;
+      ctx.strokeStyle = 'rgba(219, 231, 255, 0.95)';
+      const x = bar.x;
+      const topY = y.getPixelForValue(dataset.data[index] + error);
+      const bottomY = y.getPixelForValue(dataset.data[index] - error);
+      ctx.beginPath();
+      ctx.moveTo(x, topY);
+      ctx.lineTo(x, bottomY);
+      ctx.moveTo(x - 6, topY);
+      ctx.lineTo(x + 6, topY);
+      ctx.moveTo(x - 6, bottomY);
+      ctx.lineTo(x + 6, bottomY);
+      ctx.stroke();
+    });
+    ctx.restore();
+  },
+};
+
+Chart.register(errorBarPlugin);
+
+document.getElementById('progressValue').textContent =
+  `${formatInteger(metrics.completed_runs)} / ${formatInteger(metrics.expected_runs)}`;
+document.getElementById('progressDetail').innerHTML =
+  `${formatPercent(metrics.progress_pct)} complete across ${formatInteger(metrics.observed_rows)} rows. Estimated remaining time: <strong>${formatEta(metrics.estimated_remaining_seconds)}</strong>.`;
+
+document.getElementById('currentStageValue').textContent =
+  metrics.current_row_label ? metrics.current_row_label : 'complete';
+document.getElementById('currentStageDetail').textContent =
+  metrics.current_stage
+    ? `Current stage: ${metrics.current_stage}. Last log line: ${metrics.last_line}`
+    : `No active row detected. Last log line: ${metrics.last_line}`;
+
+document.getElementById('baseVsNoBreakValue').textContent =
+  metrics.base_pages_runtime_s !== null && metrics.no_break_runtime_s !== null
+    ? formatPercent(metrics.base_pages_pct_vs_no_break)
+    : 'n/a';
+document.getElementById('baseVsNoBreakDetail').textContent =
+  metrics.base_pages_runtime_s !== null && metrics.no_break_runtime_s !== null
+    ? `base_pages ${formatSeconds(metrics.base_pages_runtime_s)} vs no_break ${formatSeconds(metrics.no_break_runtime_s)} so far.`
+    : 'Waiting for both base_pages and no_break samples.';
+
+document.getElementById('splitOutcomeValue').textContent =
+  `${formatInteger(metrics.inferred_split_successes)} / ${formatInteger(metrics.inferred_split_successes + metrics.inferred_split_failures)}`;
+document.getElementById('splitOutcomeDetail').textContent =
+  `${formatInteger(metrics.split_rows_with_failures)} rows have logged split failures so far.`;
+
+const storyItems = [
+  {
+    title: 'Observed Layout',
+    body: `This live run currently shows ${formatInteger(metrics.observed_rows)} rows and ${formatInteger(metrics.runs_per_row)} timed runs per row. The session log itself reports ${formatInteger(metrics.observed_row_total_from_log)} rows.`,
+  },
+  {
+    title: 'Work Completed So Far',
+    body: `${formatInteger(metrics.completed_rows)} rows are fully complete and ${formatInteger(metrics.started_rows)} rows have at least one finished run.`,
+  },
+  {
+    title: 'Runtime Range',
+    body: metrics.runtime_min_s !== null
+      ? `Completed runtimes currently span ${formatSeconds(metrics.runtime_min_s)} to ${formatSeconds(metrics.runtime_max_s)} with an overall mean of ${formatSeconds(metrics.runtime_mean_s)}.`
+      : 'No completed runtimes are available yet.',
+  },
+  {
+    title: 'Limits Of This View',
+    body: metrics.limitations.join(' '),
+  },
+];
+
+const storyGrid = document.getElementById('storyGrid');
+storyItems.forEach((item) => {
+  const card = document.createElement('div');
+  card.className = 'story';
+  card.innerHTML = `<strong>${item.title}</strong><p>${item.body}</p>`;
+  storyGrid.appendChild(card);
+});
+
+const configItems = [
+  ['Experiment', metrics.experiment_name],
+  ['Workload', metrics.workload_label],
+  ['Session Log', metrics.session_log_path],
+  ['Breakpoints', metrics.breakpoints_path],
+  ['Trace', metrics.trace_path],
+  ['Report', metrics.report_path ?? 'n/a'],
+  ['Generated', metrics.generated_at_utc],
+  ['Log Mtime', metrics.session_log_mtime_utc],
+];
+
+const configGrid = document.getElementById('configGrid');
+configItems.forEach(([label, value]) => {
+  const item = document.createElement('div');
+  item.className = 'kv';
+  item.innerHTML = `<div class="label">${label}</div><div class="value mono pre-wrap">${value}</div>`;
+  configGrid.appendChild(item);
+});
+
+const rowsTableBody = document.getElementById('rowsTableBody');
+rows.forEach((row) => {
+  const tr = document.createElement('tr');
+  const badgeClass = row.status === 'complete' ? 'complete' : row.status === 'in_progress' ? 'progress' : 'pending';
+  const warningText = row.latest_warning ? row.latest_warning : '—';
+  tr.innerHTML = `
+    <td><strong>${row.short_label}</strong></td>
+    <td><span class="badge ${badgeClass}">${row.status}</span></td>
+    <td class="mono">${row.key ?? '—'}</td>
+    <td>${row.access_count !== null ? formatInteger(row.access_count) : '—'}</td>
+    <td><code>${row.thp_mode}</code></td>
+    <td>${formatInteger(row.completed_runs)} / ${formatInteger(row.total_runs)}</td>
+    <td class="mono pre-wrap">${formatRuntimeSamples(row.runtime_samples)}</td>
+    <td>${formatSeconds(row.runtime_mean)}</td>
+    <td>${formatPercent(row.runtime_pct_vs_no_break)}</td>
+    <td>${formatPercent(row.runtime_std_pct_vs_no_break)}</td>
+    <td>${row.row_type === 'hot_split_only' || row.row_type === 'random_split_only' ? `${formatInteger(row.inferred_split_successes)} success / ${formatInteger(row.inferred_split_failures)} fail` : '—'}</td>
+    <td class="mono pre-wrap">${warningText}</td>
+  `;
+  rowsTableBody.appendChild(tr);
+});
+
+const chartRows = rows.filter((row) => row.runtime_pct_vs_no_break !== null);
+new Chart(document.getElementById('deltaChart'), {
+  type: 'bar',
+  data: {
+    labels: chartRows.map((row) => row.short_label),
+    datasets: [{
+      label: 'Mean delta vs no_break so far (%)',
+      data: chartRows.map((row) => row.runtime_pct_vs_no_break),
+      errorBars: chartRows.map((row) => row.runtime_std_pct_vs_no_break ?? 0),
+      backgroundColor: chartRows.map((row) => barColorForRow(row)),
+      borderRadius: 10,
+    }],
+  },
+  options: {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label(context) {
+            const row = chartRows[context.dataIndex];
+            return [
+              `delta vs no_break: ${formatPercent(row.runtime_pct_vs_no_break)}`,
+              `std: ${formatPercent(row.runtime_std_pct_vs_no_break)}`,
+              `mean runtime: ${formatSeconds(row.runtime_mean)}`,
+              `completed runs: ${row.completed_runs}/${row.total_runs}`,
+              `split successes: ${row.inferred_split_successes}/${row.total_runs}`,
+            ];
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#d7e4f7', maxRotation: 55, minRotation: 25 },
+        grid: { display: false },
+      },
+      y: {
+        ticks: { color: '#d7e4f7' },
+        grid: { color: 'rgba(156, 176, 200, 0.12)' },
+        title: { display: true, text: '% vs no_break', color: '#d7e4f7' },
+      },
+    },
+  },
+});
+
+const runtimeRows = rows.filter((row) => row.runtime_mean !== null);
+new Chart(document.getElementById('runtimeChart'), {
+  type: 'bar',
+  data: {
+    labels: runtimeRows.map((row) => row.short_label),
+    datasets: [{
+      label: 'Mean runtime so far (s)',
+      data: runtimeRows.map((row) => row.runtime_mean),
+      errorBars: runtimeRows.map((row) => row.runtime_std ?? 0),
+      backgroundColor: runtimeRows.map((row) => barColorForRow(row)),
+      borderRadius: 10,
+    }],
+  },
+  options: {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label(context) {
+            const row = runtimeRows[context.dataIndex];
+            return [
+              `mean runtime: ${formatSeconds(row.runtime_mean)}`,
+              `std: ${formatSeconds(row.runtime_std)}`,
+              `delta vs no_break: ${formatPercent(row.runtime_pct_vs_no_break)}`,
+              `completed runs: ${row.completed_runs}/${row.total_runs}`,
+              `split successes: ${row.inferred_split_successes}/${row.total_runs}`,
+            ];
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#d7e4f7', maxRotation: 55, minRotation: 25 },
+        grid: { display: false },
+      },
+      y: {
+        ticks: { color: '#d7e4f7' },
+        grid: { color: 'rgba(156, 176, 200, 0.12)' },
+        title: { display: true, text: 'Runtime (seconds)', color: '#d7e4f7' },
+      },
+    },
+  },
+});
+
+const splitRows = rows.filter((row) => row.row_type === 'hot_split_only' || row.row_type === 'random_split_only');
+new Chart(document.getElementById('splitChart'), {
+  type: 'bar',
+  data: {
+    labels: splitRows.map((row) => row.short_label),
+    datasets: [
+      {
+        label: 'Inferred successes',
+        data: splitRows.map((row) => row.inferred_split_successes),
+        backgroundColor: 'rgba(88, 208, 178, 0.76)',
+        borderRadius: 8,
+      },
+      {
+        label: 'Inferred failures',
+        data: splitRows.map((row) => row.inferred_split_failures),
+        backgroundColor: 'rgba(255, 112, 128, 0.76)',
+        borderRadius: 8,
+      },
+    ],
+  },
+  options: {
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: { color: '#d7e4f7' },
+      },
+      tooltip: {
+        callbacks: {
+          afterBody(items) {
+            const row = splitRows[items[0].dataIndex];
+            return [
+              `completed split runs: ${row.completed_split_runs}/${row.total_runs}`,
+              `retry lines: ${row.inferred_retry_count_total}`,
+              `observed max attempts: ${row.observed_max_attempts}`,
+            ];
+          },
+        },
+      },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#d7e4f7', maxRotation: 55, minRotation: 25 },
+        grid: { display: false },
+      },
+      y: {
+        ticks: { color: '#d7e4f7', precision: 0 },
+        grid: { color: 'rgba(156, 176, 200, 0.12)' },
+        title: { display: true, text: 'Completed runs so far', color: '#d7e4f7' },
+      },
+    },
+  },
+});
+
+document.getElementById('footerText').textContent =
+  `Generated at ${metrics.generated_at_utc} from the live session log. This page is a preview for an in-progress run and should be regenerated as the log grows.`;
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ import signal
 import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 from data_schema import GraphEngine, demote
@@ -29,7 +30,6 @@ class MongoDbConfig(ConfigBase):
     record_count: int = 1000000
     read_proportion: float = 0.5
     update_proportion: float = 0.5
-    scan_proportion: float = 0.0
     insert_proportion: float = 0.0
     rmw_proportion: float = 0.00
     scan_proportion: float = 0.00
@@ -94,7 +94,12 @@ class MongoDbBenchmark(Benchmark):
             return None
         subprocess.run(kill_mongod)
 
-    def run(self) -> None:
+    def run(
+        self,
+        *,
+        run_dir: Path | None = None,
+        config_text: str | None = None,
+    ) -> None:
         if self.process is not None:
             raise BenchmarkRunningError()
         if self.server is not None:
@@ -193,8 +198,6 @@ class MongoDbBenchmark(Benchmark):
                 f"readproportion={self.config.read_proportion}",
                 "-p",
                 f"updateproportion={self.config.update_proportion}",
-                "-p",
-                f"scanproportion={self.config.scan_proportion}",
                 "-p",
                 f"insertproportion={self.config.insert_proportion}",
                 "-p",

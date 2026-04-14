@@ -98,13 +98,16 @@ Start Redis with the repo config and the `VAPTR` module:
 
 ```bash
 cd ~/HugePageResearch
-REDIS_BIN="$(command -v redis-server)"
-"$REDIS_BIN" ./config/redis.conf --loadmodule ./redis-module/vaptr.so
+REDIS_BIN="/tmp/redis-7.4.2/src/redis-server"
+"$REDIS_BIN" ~/HugePageResearch/config/redis.conf \
+  --loadmodule ~/HugePageResearch/redis-module/vaptr.so
 ```
 
-For replay and manual VAPTR smoke runs, do not start Redis as bare
-`redis-server ...`. `replay_trace.py` expects `INFO server.executable` to
-already be a real executable path.
+For replay and manual VAPTR smoke runs, do not assume the distro Redis works.
+On this machine, `/usr/bin/redis-server` is `7.0.15` and failed to load
+`redis-module/vaptr.so`. `replay_trace.py` expects `INFO server.executable` to
+already be the exact Redis binary that can load the module, which is why this
+guide uses `/tmp/redis-7.4.2/src/redis-server`.
 
 Insert one hash with a 2 MiB field value:
 
@@ -144,13 +147,13 @@ Invoke the syscall:
 
 Or invoke the replay-time Python helper that now performs the same
 `INFO server` -> `VAPTR FIELD field0` -> `split_thp` flow used by
-`python/kernmlops/data_collection/replay_trace.py`:
+`python/kernmlops/replay/replay_trace.py`:
 
 ```bash
 cd ~/HugePageResearch
 PYTHONPATH=./python/kernmlops .venv/bin/python - <<'PY'
 import redis
-from data_collection.replay_trace import break_page
+from replay.replay_trace import break_page
 
 client = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
 redis_pid = int(client.info("server")["process_id"])

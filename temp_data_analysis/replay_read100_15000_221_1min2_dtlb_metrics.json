@@ -1,0 +1,23 @@
+{
+  "results_path": "/users/SahilSC/HugePageResearch/data/replay_read100_15000_221_1min2_dtlb_results_5rows.parquet",
+  "trace_path": "/users/SahilSC/HugePageResearch/data/redis_traces/replay_read100_15000_252_1min2_monitor_run.log",
+  "workload_label": "100% read intermediate dTLB",
+  "rows": 5,
+  "hot_rows": 2,
+  "random_rows": 1,
+  "base_pages_runtime_s": 62.625588379451074,
+  "no_break_runtime_s": 63.87961193558294,
+  "base_pages_pct_vs_no_break": -1.9631045307483164,
+  "base_pages_dtlb_misses": 12544064.0,
+  "base_pages_dtlb_misses_pct_vs_no_break": 10.416343366316937,
+  "hot_split_mean_runtime_pct": 0.1576035253311403,
+  "random_split_mean_runtime_pct": 1.5602310145049314,
+  "hot_split_mean_miss_pct": -4.3594097896299475,
+  "random_split_mean_miss_pct": 0.7574404558875925,
+  "runtime_min_s": 60.05108423996717,
+  "runtime_max_s": 68.46135042002425,
+  "dtlb_miss_min": 10413203.0,
+  "dtlb_miss_max": 12806821.0,
+  "timed_runs": 10,
+  "split_rows_slower_than_no_break": 2
+}

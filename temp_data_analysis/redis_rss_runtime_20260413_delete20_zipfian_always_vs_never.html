@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redis always vs never RSS/runtime 20260413_delete20_zipfian</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --ink: #1b2733;
+      --muted: #617181;
+      --border: #d7dee7;
+    }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(42, 157, 143, 0.12), transparent 30%),
+        linear-gradient(180deg, #f8fafc 0%, var(--bg) 100%);
+      font-family: Georgia, "Times New Roman", serif;
+    }
+    main {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 28px 22px 48px;
+    }
+    header {
+      background: linear-gradient(135deg, #18324a 0%, #28536b 55%, #2a9d8f 100%);
+      color: #f8fbff;
+      border-radius: 24px;
+      padding: 28px 30px;
+      box-shadow: 0 24px 70px rgba(24, 50, 74, 0.22);
+      margin-bottom: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 34px;
+      line-height: 1.1;
+    }
+    header p {
+      margin: 6px 0;
+      color: rgba(248, 251, 255, 0.92);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 20px;
+      border: 1px solid rgba(215, 222, 231, 0.9);
+      box-shadow: 0 18px 48px rgba(26, 38, 53, 0.08);
+      padding: 18px;
+      margin-top: 18px;
+    }
+    .metric-label {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .metric-value {
+      font-size: 28px;
+      font-weight: 700;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    .metric-sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    h2 {
+      margin: 0 0 4px;
+      font-size: 22px;
+    }
+    p.subtitle {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    img {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+    ul {
+      margin: 0;
+      padding-left: 20px;
+    }
+    li {
+      margin: 6px 0;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+    }
+    code {
+      background: #edf2f7;
+      border-radius: 6px;
+      padding: 2px 6px;
+      font-size: 0.95em;
+      font-family: "SFMono-Regular", Consolas, monospace;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px;
+    }
+    th, td {
+      padding: 12px 10px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    th {
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: #f7fafc;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Redis always vs never RSS/runtime</h1>
+      <p>This dashboard compares the two RSS-enabled collections captured on <code>20260413_delete20_zipfian</code>.</p>
+      <p>The runtime graphs use raw YCSB <code>[OVERALL], RunTime(ms)</code> values by <code>out_i</code>. The RSS graph uses the latest reconstructed Redis RSS sample at or before each run-phase completion.</p>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="metric-label">Always Collection</div>
+        <div class="metric-value">20260413T120742759288</div>
+        <div class="metric-sub">/users/SahilSC/HugePageResearch/data/curated/redis/20260413T120742759288</div>
+      </section>
+      <section class="card">
+        <div class="metric-label">Never Collection</div>
+        <div class="metric-value">20260413T112703058069</div>
+        <div class="metric-sub">/users/SahilSC/HugePageResearch/data/curated/redis/20260413T112703058069</div>
+      </section>
+      <section class="card">
+        <div class="metric-label">Always Stdout Log</div>
+        <div class="metric-value">tee output</div>
+        <div class="metric-sub">temp_data_analysis/redis_always_delete20_zipfian_20260413_collect.stdout.log</div>
+      </section>
+      <section class="card">
+        <div class="metric-label">Never Stdout Log</div>
+        <div class="metric-value">tee output</div>
+        <div class="metric-sub">temp_data_analysis/redis_never_delete20_zipfian_20260413_collect.stdout.log</div>
+      </section>
+    </div>
+
+    <section class="card">
+      <h2>Load runtime by outer iteration</h2>
+      <p class="subtitle">Same visual style as the prior always-vs-never YCSB runtime overlays, now regenerated from the new RSS-enabled collections.</p>
+      <img src="ycsb_overall_load_runtime_20260413_delete20_zipfian_always_vs_never.png" alt="Load runtime by outer iteration" />
+    </section>
+
+    <section class="card">
+      <h2>Run runtime by outer iteration</h2>
+      <p class="subtitle">Per-outer-iteration run-phase [OVERALL] runtime from <code>redis_benchmark.log</code>.</p>
+      <img src="ycsb_overall_run_runtime_20260413_delete20_zipfian_always_vs_never.png" alt="Run runtime by outer iteration" />
+    </section>
+
+    <section class="card">
+      <h2>Redis RSS at run completion</h2>
+      <p class="subtitle">Each point is the latest Redis RSS value rebuilt from <code>mm_rss_stat</code> at or before the matching run completion time.</p>
+      <img src="redis_rss_outer_iteration_20260413_delete20_zipfian_always_vs_never.png" alt="Redis RSS by outer iteration" />
+    </section>
+
+    <section class="card">
+      <h2>Exact inputs used</h2>
+      <ul>
+        <li><code>/users/SahilSC/HugePageResearch/data/curated/redis/20260413T120742759288/redis_benchmark.log</code></li>
+        <li><code>/users/SahilSC/HugePageResearch/data/curated/redis/20260413T120742759288/process_trace.*.parquet</code></li>
+        <li><code>/users/SahilSC/HugePageResearch/data/curated/redis/20260413T120742759288/mm_rss_stat.*.parquet</code></li>
+        <li><code>/users/SahilSC/HugePageResearch/data/curated/redis/20260413T112703058069/redis_benchmark.log</code></li>
+        <li><code>/users/SahilSC/HugePageResearch/data/curated/redis/20260413T112703058069/process_trace.*.parquet</code></li>
+        <li><code>/users/SahilSC/HugePageResearch/data/curated/redis/20260413T112703058069/mm_rss_stat.*.parquet</code></li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Parsed values</h2>
+      <p class="subtitle">These are the exact outer-iteration values used to draw the PNG charts.</p>
+      
+    <table>
+      <thead>
+        <tr>
+          <th>out_i</th>
+          <th>Always load (s)</th>
+          <th>Always run (s)</th>
+          <th>Always RSS (GiB)</th>
+          <th>Never load (s)</th>
+          <th>Never run (s)</th>
+          <th>Never RSS (GiB)</th>
+        </tr>
+      </thead>
+      <tbody>
+    <tr><td>0</td><td>28.565</td><td>41.011</td><td>4.988</td><td>53.179</td><td>40.999</td><td>4.033</td></tr><tr><td>1</td><td>49.244</td><td>41.009</td><td>4.988</td><td>52.873</td><td>41.012</td><td>4.033</td></tr><tr><td>2</td><td>52.533</td><td>41.008</td><td>4.988</td><td>52.750</td><td>41.008</td><td>4.033</td></tr><tr><td>3</td><td>51.444</td><td>41.008</td><td>4.988</td><td>52.533</td><td>41.008</td><td>4.033</td></tr><tr><td>4</td><td>51.398</td><td>41.003</td><td>4.988</td><td>52.606</td><td>41.007</td><td>4.033</td></tr><tr><td>5</td><td>48.334</td><td>41.007</td><td>4.988</td><td>53.135</td><td>41.002</td><td>4.033</td></tr><tr><td>6</td><td>49.942</td><td>41.004</td><td>4.988</td><td>53.064</td><td>41.004</td><td>4.033</td></tr><tr><td>7</td><td>50.507</td><td>41.010</td><td>4.988</td><td>52.751</td><td>41.011</td><td>4.033</td></tr><tr><td>8</td><td>47.495</td><td>41.001</td><td>4.988</td><td>53.233</td><td>41.008</td><td>4.033</td></tr><tr><td>9</td><td>48.485</td><td>41.007</td><td>4.988</td><td>52.825</td><td>41.010</td><td>4.033</td></tr><tr><td>10</td><td>49.303</td><td>41.005</td><td>4.988</td><td>53.314</td><td>41.005</td><td>4.033</td></tr><tr><td>11</td><td>46.677</td><td>41.011</td><td>4.988</td><td>49.559</td><td>41.007</td><td>4.033</td></tr><tr><td>12</td><td>47.665</td><td>41.001</td><td>4.988</td><td>52.893</td><td>41.006</td><td>4.033</td></tr><tr><td>13</td><td>49.306</td><td>41.006</td><td>4.988</td><td>51.812</td><td>41.009</td><td>4.033</td></tr><tr><td>14</td><td>47.555</td><td>41.007</td><td>4.988</td><td>53.359</td><td>41.008</td><td>4.033</td></tr><tr><td>15</td><td>46.060</td><td>41.008</td><td>4.988</td><td>52.416</td><td>41.018</td><td>4.033</td></tr><tr><td>16</td><td>46.695</td><td>41.008</td><td>4.988</td><td>51.312</td><td>41.007</td><td>4.033</td></tr><tr><td>17</td><td>48.922</td><td>41.004</td><td>4.988</td><td>52.907</td><td>41.011</td><td>4.033</td></tr><tr><td>18</td><td>49.187</td><td>41.004</td><td>4.988</td><td>52.913</td><td>41.005</td><td>4.033</td></tr><tr><td>19</td><td>47.862</td><td>41.002</td><td>4.988</td><td>53.106</td><td>41.025</td><td>4.036</td></tr>
+      </tbody>
+    </table>
+    
+    </section>
+  </main>
+</body>
+</html>

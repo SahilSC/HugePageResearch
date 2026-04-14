@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>80% read / 20% delete · exp2</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a1322;
+    --bg-accent: #10263d;
+    --card: rgba(10, 22, 39, 0.84);
+    --border: rgba(137, 187, 255, 0.16);
+    --text: #edf4ff;
+    --muted: #9db1ca;
+    --blue: #79a8ff;
+    --teal: #59d2b2;
+    --gold: #f5b54a;
+    --red: #ff6e7d;
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(121, 168, 255, 0.18), transparent 30%),
+      radial-gradient(circle at top right, rgba(89, 210, 178, 0.14), transparent 28%),
+      linear-gradient(180deg, #0a1322 0%, #09111c 64%, #070e18 100%);
+    padding: 28px 20px 36px;
+  }
+  .page {
+    max-width: 1380px;
+    margin: 0 auto;
+  }
+  header { margin-bottom: 24px; }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(121, 168, 255, 0.12);
+    border: 1px solid rgba(121, 168, 255, 0.16);
+    color: #cfe0ff;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  header h1 {
+    margin: 14px 0 10px;
+    font-size: clamp(2rem, 4vw, 3.3rem);
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+  }
+  header p {
+    margin: 0;
+    max-width: 920px;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+  .notice {
+    margin-top: 14px;
+    display: inline-block;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255, 181, 74, 0.09);
+    border: 1px solid rgba(255, 181, 74, 0.16);
+    color: #ffe7c3;
+    font-size: 0.88rem;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .stat {
+    background: linear-gradient(180deg, rgba(17, 36, 61, 0.96), rgba(10, 22, 39, 0.96));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .stat .label {
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stat .value {
+    margin-top: 10px;
+    font-size: clamp(1.65rem, 3vw, 2.35rem);
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+  .stat .detail {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .card {
+    grid-column: span 6;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 20px 20px 18px;
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow);
+  }
+  .card.full-width {
+    grid-column: 1 / -1;
+  }
+  .card h2 {
+    margin: 0 0 8px;
+    font-size: 1.18rem;
+    line-height: 1.25;
+  }
+  .card .desc {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 0.93rem;
+    line-height: 1.58;
+  }
+  .chart-wrap {
+    position: relative;
+    height: 380px;
+  }
+  .chart-wrap.tall { height: 470px; }
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .story-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .story {
+    background: rgba(17, 36, 61, 0.72);
+    border: 1px solid rgba(135, 178, 255, 0.12);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .story strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #ffffff;
+    font-size: 0.96rem;
+  }
+  .story p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .mono {
+    font-family: "SFMono-Regular", ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.84rem;
+    color: #dfe9ff;
+    word-break: break-word;
+  }
+  .pre-wrap {
+    white-space: pre-wrap;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .chip.red {
+    color: #ffdce2;
+    background: rgba(255, 110, 125, 0.13);
+  }
+  .chip.teal {
+    color: #dafef3;
+    background: rgba(89, 210, 178, 0.13);
+  }
+  .chip.blue {
+    color: #dce8ff;
+    background: rgba(121, 168, 255, 0.14);
+  }
+  .chip.gold {
+    color: #ffedcc;
+    background: rgba(245, 181, 74, 0.14);
+  }
+  .kv-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+  .kv {
+    background: rgba(17, 36, 61, 0.72);
+    border: 1px solid rgba(135, 178, 255, 0.12);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .kv .label {
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .kv .value {
+    margin-top: 8px;
+    font-size: 0.96rem;
+    line-height: 1.5;
+  }
+  table.summary {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+  }
+  table.summary th, table.summary td {
+    padding: 12px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(135, 178, 255, 0.1);
+    vertical-align: top;
+  }
+  table.summary th {
+    color: #d8e6ff;
+    font-size: 0.84rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  table.summary tbody tr:hover {
+    background: rgba(121, 168, 255, 0.05);
+  }
+  footer {
+    margin-top: 20px;
+    padding: 18px 20px;
+    border-radius: 18px;
+    background: rgba(10, 22, 39, 0.82);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.65;
+  }
+  @media (max-width: 1100px) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { grid-column: 1 / -1; }
+    .kv-grid { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 720px) {
+    body { padding: 20px 14px 32px; }
+    .stats { grid-template-columns: 1fr; }
+    .story-grid { grid-template-columns: 1fr; }
+    .chart-wrap, .chart-wrap.tall { height: 320px; }
+    table.summary, table.summary thead, table.summary tbody, table.summary tr, table.summary td, table.summary th {
+      display: block;
+    }
+    table.summary thead { display: none; }
+    table.summary tr {
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(135, 178, 255, 0.1);
+    }
+    table.summary td {
+      border: none;
+      padding: 6px 0;
+    }
+    table.summary td::before {
+      content: attr(data-label);
+      display: block;
+      color: #d8e6ff;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <div class="eyebrow">Redis Replay · Runtime Only</div>
+  <h1 id="headerTitle">--</h1>
+  <p id="headerDescription">
+    This dashboard reads <code>data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_results_16rows.parquet</code>. It excludes all hardware
+    counters and focuses only on runtime plus replay-time split success/failure metadata.
+  </p>
+  <div class="notice">
+    Runtime only. No dTLB loads, dTLB misses, or any other hardware counter measurements.
+  </div>
+</header>
+
+<section class="stats">
+  <article class="stat">
+    <div class="label">base_pages runtime</div>
+    <div class="value" id="basePagesRuntimeValue">--</div>
+    <div class="detail" id="basePagesRuntimeDetail">--</div>
+  </article>
+  <article class="stat">
+    <div class="label">Hot split mean</div>
+    <div class="value" id="hotSplitValue">--</div>
+    <div class="detail" id="hotSplitDetail">--</div>
+  </article>
+  <article class="stat">
+    <div class="label">Random split mean</div>
+    <div class="value" id="randomSplitValue">--</div>
+    <div class="detail" id="randomSplitDetail">--</div>
+  </article>
+  <article class="stat">
+    <div class="label">Split max attempts</div>
+    <div class="value" id="splitAttemptsValue">--</div>
+    <div class="detail" id="splitAttemptsDetail">--</div>
+  </article>
+</section>
+
+<section class="grid">
+  <div class="card full-width">
+    <h2>Section 1 — Runtime Overview</h2>
+    <p class="desc">
+      Mean runtime for <code>base_pages</code>, <code>no_break</code>, and only
+      the split rows that achieved at least one successful split. Labels include
+      successful splits out of the expected run count, and error bars draw runtime std.
+    </p>
+    <div class="chart-wrap tall"><canvas id="runtimeChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Section 2 — Runtime Delta vs Access Count</h2>
+    <p class="desc">
+      Each point is one split-only row with at least one successful split. The
+      X-axis is accepted-trace access count, and the Y-axis is runtime change
+      versus <code>no_break</code>.
+    </p>
+    <div class="chart-wrap"><canvas id="scatterChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Section 3 — Grouped Runtime View</h2>
+    <p class="desc">
+      Grouped runtime means for <code>base_pages</code>, <code>no_break</code>,
+      successful hot split rows, and successful random split rows. Error bars draw runtime std.
+    </p>
+    <div class="chart-wrap"><canvas id="groupChart"></canvas></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Section 4 — Split Outcomes</h2>
+    <p class="desc">
+      Successful versus failed replay-time split events for each split-only row.
+      Zero-success rows stay here and in the summary even when they are omitted from the main runtime chart.
+    </p>
+    <div class="chart-wrap"><canvas id="splitOutcomeChart"></canvas></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Section 5 — Experiment Config</h2>
+    <p class="desc">
+      Exact replay, capture, and verification settings needed to rerun this experiment.
+    </p>
+    <div class="kv-grid" id="configGrid"></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Section 6 — Important Insights</h2>
+    <p class="desc">
+      High-level observations from this runtime-only replay pass.
+    </p>
+    <div class="story-grid" id="storyGrid"></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Section 7 — Row Summary</h2>
+    <p class="desc">
+      Full per-row runtime samples, split outcomes, and attempt metadata.
+    </p>
+    <div id="summaryTableWrap"></div>
+  </div>
+</section>
+
+<footer id="footerMeta">--</footer>
+</div>
+
+<script id="runtimeExperimentMetricsData" type="application/json">
+{
+  "experiment_name": "exp2",
+  "results_path": "/KernMLOps/data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_results_16rows.parquet",
+  "trace_path": "/KernMLOps/data/redis_traces/exp2_read80_delete20_delEqHalfRecord_2122_2min3_monitor_run.log",
+  "workload_label": "80% read / 20% delete",
+  "rows": 16,
+  "chart_rows": 8,
+  "hot_rows": 12,
+  "random_rows": 2,
+  "hot_rows_with_success": 5,
+  "random_rows_with_success": 1,
+  "base_pages_runtime_s": 117.26705739538495,
+  "no_break_runtime_s": 113.10597254087527,
+  "base_pages_pct_vs_no_break": 3.678925843642711,
+  "hot_split_mean_runtime_pct": 5.081834245817527,
+  "random_split_mean_runtime_pct": 2.6585728392323427,
+  "hot_split_success_rate_pct": 41.66666666666667,
+  "random_split_success_rate_pct": 50.0,
+  "runtime_min_s": 104.84739743499085,
+  "runtime_max_s": 127.8440158138983,
+  "timed_runs": 48,
+  "configured_max_split_attempts": 2,
+  "observed_max_split_attempts": 2,
+  "split_rows_without_success": 8,
+  "split_rows_with_failures": 8,
+  "started_at_utc": "2026-04-09T18:49:19Z",
+  "finished_at_utc": "2026-04-09T20:15:00Z",
+  "elapsed_seconds": 5141
+}
+</script>
+<script id="runtimeExperimentRowsData" type="application/json">
+[
+  {
+    "row_index": 0,
+    "thp_mode": "never",
+    "row_type": "base_pages",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      120.11422523506917,
+      114.76409816602245,
+      116.92284878506325
+    ],
+    "runtime_mean": 117.26705739538495,
+    "runtime_std": 2.6916211823548486,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_events_total": 0,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_syscall_attempts_total": 0,
+    "split_max_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "observed_max_attempts": 0,
+    "expected_split_events": 0,
+    "split_success_rate_pct": null,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "base_pages",
+    "runtime_delta_vs_no_break": 4.1610848545096815,
+    "runtime_pct_vs_no_break": 3.678925843642711
+  },
+  {
+    "row_index": 1,
+    "thp_mode": "always",
+    "row_type": "no_break",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      112.89990010089241,
+      114.13543779379688,
+      112.28257972793654
+    ],
+    "runtime_mean": 113.10597254087527,
+    "runtime_std": 0.9434617856311428,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_events_total": 0,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_syscall_attempts_total": 0,
+    "split_max_attempts_samples": [
+      0,
+      0,
+      0
+    ],
+    "observed_max_attempts": 0,
+    "expected_split_events": 0,
+    "split_success_rate_pct": null,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "no_break",
+    "runtime_delta_vs_no_break": 0.0,
+    "runtime_pct_vs_no_break": 0.0
+  },
+  {
+    "row_index": 2,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user2351990715801970311",
+    "access_count": 1335,
+    "runtime_samples": [
+      113.79642873490229,
+      122.07677574502304,
+      116.1574939021375
+    ],
+    "runtime_mean": 117.34356612735428,
+    "runtime_std": 4.265690113519372,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 1,
+    "random_rank": null,
+    "short_label": "hot#1 (3/3)",
+    "runtime_delta_vs_no_break": 4.237593586479008,
+    "runtime_pct_vs_no_break": 3.7465692494245584
+  },
+  {
+    "row_index": 3,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user8621025099142059187",
+    "access_count": 642,
+    "runtime_samples": [
+      104.84739743499085,
+      116.84234707895666,
+      121.04557771980762
+    ],
+    "runtime_mean": 114.24510741125171,
+    "runtime_std": 8.40562321029689,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 2,
+    "random_rank": null,
+    "short_label": "hot#2 (0/3)",
+    "runtime_delta_vs_no_break": 1.139134870376438,
+    "runtime_pct_vs_no_break": 1.0071394505402953
+  },
+  {
+    "row_index": 4,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user2390393595058248558",
+    "access_count": 530,
+    "runtime_samples": [
+      112.16145250899717,
+      111.34605690906756,
+      121.52473034197465
+    ],
+    "runtime_mean": 115.01074658667979,
+    "runtime_std": 5.655988487371601,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 3,
+    "random_rank": null,
+    "short_label": "hot#3 (0/3)",
+    "runtime_delta_vs_no_break": 1.9047740458045155,
+    "runtime_pct_vs_no_break": 1.6840614186984348
+  },
+  {
+    "row_index": 5,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user6636553130839969302",
+    "access_count": 373,
+    "runtime_samples": [
+      109.54872831492685,
+      113.92753784288652,
+      112.7938344979193
+    ],
+    "runtime_mean": 112.09003355191089,
+    "runtime_std": 2.272662546274603,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 4,
+    "random_rank": null,
+    "short_label": "hot#4 (0/3)",
+    "runtime_delta_vs_no_break": -1.015938988964379,
+    "runtime_pct_vs_no_break": -0.8982186936213554
+  },
+  {
+    "row_index": 6,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user317048932254693363",
+    "access_count": 307,
+    "runtime_samples": [
+      108.66264521609992,
+      112.3376633960288,
+      124.73308288608678
+    ],
+    "runtime_mean": 115.2444638327385,
+    "runtime_std": 8.42032412145607,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 5,
+    "random_rank": null,
+    "short_label": "hot#5 (0/3)",
+    "runtime_delta_vs_no_break": 2.1384912918632324,
+    "runtime_pct_vs_no_break": 1.8906970550033542
+  },
+  {
+    "row_index": 7,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user5938475048244035132",
+    "access_count": 269,
+    "runtime_samples": [
+      114.59242306696251,
+      118.4986437750049,
+      117.63668138696812
+    ],
+    "runtime_mean": 116.90924940964517,
+    "runtime_std": 2.0521959010310793,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 6,
+    "random_rank": null,
+    "short_label": "hot#6 (3/3)",
+    "runtime_delta_vs_no_break": 3.803276868769899,
+    "runtime_pct_vs_no_break": 3.362578282411599
+  },
+  {
+    "row_index": 8,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user4323410974463024952",
+    "access_count": 235,
+    "runtime_samples": [
+      121.45524663501419,
+      109.71819755714387,
+      120.25330529012717
+    ],
+    "runtime_mean": 117.14224982742842,
+    "runtime_std": 6.457443753767818,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 7,
+    "random_rank": null,
+    "short_label": "hot#7 (0/3)",
+    "runtime_delta_vs_no_break": 4.036277286553144,
+    "runtime_pct_vs_no_break": 3.568580151763845
+  },
+  {
+    "row_index": 9,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user5267642368719093717",
+    "access_count": 182,
+    "runtime_samples": [
+      122.55305064097047,
+      124.1780883630272,
+      127.3663845420815
+    ],
+    "runtime_mean": 124.69917451535973,
+    "runtime_std": 2.448610604916742,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 8,
+    "random_rank": null,
+    "short_label": "hot#8 (3/3)",
+    "runtime_delta_vs_no_break": 11.593201974484458,
+    "runtime_pct_vs_no_break": 10.249858353231357
+  },
+  {
+    "row_index": 10,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user2144571683223468943",
+    "access_count": 159,
+    "runtime_samples": [
+      121.05381647101603,
+      127.8440158138983,
+      114.81808087881655
+    ],
+    "runtime_mean": 121.23863772124362,
+    "runtime_std": 6.5149339524010195,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 9,
+    "random_rank": null,
+    "short_label": "hot#9 (0/3)",
+    "runtime_delta_vs_no_break": 8.132665180368349,
+    "runtime_pct_vs_no_break": 7.190305690912391
+  },
+  {
+    "row_index": 11,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user8125243236669674938",
+    "access_count": 145,
+    "runtime_samples": [
+      119.70361024490558,
+      118.60039479588158,
+      116.79005675995722
+    ],
+    "runtime_mean": 118.3646872669148,
+    "runtime_std": 1.4710088398178967,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 10,
+    "random_rank": null,
+    "short_label": "hot#10 (3/3)",
+    "runtime_delta_vs_no_break": 5.258714726039528,
+    "runtime_pct_vs_no_break": 4.649369620281618
+  },
+  {
+    "row_index": 12,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user8357566562958791958",
+    "access_count": 130,
+    "runtime_samples": [
+      106.94235030002892,
+      112.16755051002838,
+      111.79208383103833
+    ],
+    "runtime_mean": 110.30066154703188,
+    "runtime_std": 2.9144355595154026,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": 11,
+    "random_rank": null,
+    "short_label": "hot#11 (0/3)",
+    "runtime_delta_vs_no_break": -2.805310993843392,
+    "runtime_pct_vs_no_break": -2.4802500971640384
+  },
+  {
+    "row_index": 13,
+    "thp_mode": "always",
+    "row_type": "hot_split_only",
+    "key": "user405020020949719660",
+    "access_count": 109,
+    "runtime_samples": [
+      122.73918868997134,
+      118.87132754712366,
+      109.24691061791964
+    ],
+    "runtime_mean": 116.95247561833821,
+    "runtime_std": 6.947797236307672,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": 12,
+    "random_rank": null,
+    "short_label": "hot#12 (3/3)",
+    "runtime_delta_vs_no_break": 3.846503077462941,
+    "runtime_pct_vs_no_break": 3.4007957237385034
+  },
+  {
+    "row_index": 14,
+    "thp_mode": "always",
+    "row_type": "random_split_only",
+    "key": "user3437113317267471800",
+    "access_count": 2,
+    "runtime_samples": [
+      112.35256486502476,
+      118.56601837906055,
+      117.42034837510437
+    ],
+    "runtime_mean": 116.11297720639656,
+    "runtime_std": 3.30660939216401,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_successes_total": 3,
+    "split_failures_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_failures_total": 0,
+    "split_syscall_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_syscall_attempts_total": 3,
+    "split_max_attempts_samples": [
+      1,
+      1,
+      1
+    ],
+    "observed_max_attempts": 1,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 100.0,
+    "hot_rank": null,
+    "random_rank": 1,
+    "short_label": "rand#1 (3/3)",
+    "runtime_delta_vs_no_break": 3.0070046655212934,
+    "runtime_pct_vs_no_break": 2.6585728392323427
+  },
+  {
+    "row_index": 15,
+    "thp_mode": "always",
+    "row_type": "random_split_only",
+    "key": "user3540491433731367504",
+    "access_count": 1,
+    "runtime_samples": [
+      126.01221260381863,
+      109.84658570797183,
+      114.2908414278645
+    ],
+    "runtime_mean": 116.71654657988499,
+    "runtime_std": 8.351341649539634,
+    "commands_replayed_samples": [
+      37063,
+      37063,
+      37063
+    ],
+    "commands_replayed_total": 111189,
+    "split_events_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_events_total": 3,
+    "split_successes_samples": [
+      0,
+      0,
+      0
+    ],
+    "split_successes_total": 0,
+    "split_failures_samples": [
+      1,
+      1,
+      1
+    ],
+    "split_failures_total": 3,
+    "split_syscall_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "split_syscall_attempts_total": 6,
+    "split_max_attempts_samples": [
+      2,
+      2,
+      2
+    ],
+    "observed_max_attempts": 2,
+    "expected_split_events": 3,
+    "split_success_rate_pct": 0.0,
+    "hot_rank": null,
+    "random_rank": 2,
+    "short_label": "rand#2 (0/3)",
+    "runtime_delta_vs_no_break": 3.6105740390097196,
+    "runtime_pct_vs_no_break": 3.1922045829232415
+  }
+]
+</script>
+<script id="runtimeExperimentManifestData" type="application/json">
+{
+  "experiment_name": "exp2",
+  "workload_label": "80% read / 20% delete",
+  "row_layout": {
+    "hot_keys": 12,
+    "random_rows": 2,
+    "runs": 3
+  },
+  "capture": {
+    "record_count": 13815,
+    "operation_count": 34538,
+    "read_proportion": 0.8,
+    "delete_proportion": 0.2,
+    "insert_proportion": 0.0,
+    "update_proportion": 0.0,
+    "scan_proportion": 0.0,
+    "readmodifywrite_proportion": 0.0
+  },
+  "verification": {
+    "record_count": 1024,
+    "operation_count": 4096,
+    "hot_keys": 2,
+    "random_rows": 1,
+    "runs": 1
+  },
+  "replay": {
+    "break_page_max_attempts": 2,
+    "collector_config": null,
+    "hardware_counters": []
+  },
+  "commands": {
+    "capture": "RECORD_COUNT=13815 OPERATION_COUNT=34538 READ_PROPORTION=0.80 DELETE_PROPORTION=0.20 INSERT_PROPORTION=0.00 UPDATE_PROPORTION=0.00 SCAN_PROPORTION=0.00 READMODIFYWRITE_PROPORTION=0.00 bash python/kernmlops/replay/capture_redis_trace.sh",
+    "replay": "python python/kernmlops/replay/replay_trace.py data/redis_traces/exp2_read80_delete20_delEqHalfRecord_2122_2min3_snapshot.rdb data/redis_traces/exp2_read80_delete20_delEqHalfRecord_2122_2min3_monitor_run.log --breakpoints data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_breakpoints_16rows.parquet --output data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_results_16rows.parquet --runs 3 -v",
+    "dashboard": "python temp_data_analysis/replay_runtime_experiment_dashboard.py --results data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_results_16rows.parquet --trace data/redis_traces/exp2_read80_delete20_delEqHalfRecord_2122_2min3_monitor_run.log --manifest data/experiment_manifests/exp2_read80_delete20_delEqHalfRecord_2122_2min3.json --output-html temp_data_analysis/exp2_read80_delete20_delEqHalfRecord_2122_2min3_dashboard.html --output-metrics temp_data_analysis/exp2_read80_delete20_delEqHalfRecord_2122_2min3_metrics.json --output-rows temp_data_analysis/exp2_read80_delete20_delEqHalfRecord_2122_2min3_rows.json --output-summary temp_data_analysis/exp2_read80_delete20_delEqHalfRecord_2122_2min3_summary.md"
+  },
+  "artifacts": {
+    "trace": "data/redis_traces/exp2_read80_delete20_delEqHalfRecord_2122_2min3_monitor_run.log",
+    "results": "data/exp2_read80_delete20_delEqHalfRecord_2122_2min3_results_16rows.parquet"
+  },
+  "started_at_utc": "2026-04-09T18:49:19Z",
+  "finished_at_utc": "2026-04-09T20:15:00Z",
+  "elapsed_seconds": 5141,
+  "notes": [
+    "Runtime-only exp2 replay. No dTLB or other hardware counters were collected.",
+    "Row layout: 2 base + 12 hottest + 2 random = 16 rows.",
+    "Runtime target: 120s (acceptance band 105s-135s).",
+    "Delete count is targeted to roughly match half of the starting record count.",
+    "Calibration attempt 1: record_count=8000, operation_count=20000, base_pages=69.489s, accepted=false",
+    "Calibration attempt 2: record_count=13815, operation_count=34538, base_pages=115.910s, accepted=true"
+  ],
+  "insights": []
+}
+</script>
+<script>
+Chart.defaults.color = '#a0a0b0';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+const runtimeErrorBarPlugin = {
+  id: 'runtimeErrorBarPlugin',
+  afterDatasetsDraw(chart, _args, options) {
+    const datasets = chart.data.datasets ?? [];
+    const yScale = chart.scales.y;
+    if (!yScale) {
+      return;
+    }
+
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = options.color ?? 'rgba(255,255,255,0.75)';
+    ctx.lineWidth = options.lineWidth ?? 1.5;
+
+    datasets.forEach((dataset, datasetIndex) => {
+      const errorBars = dataset.errorBars ?? [];
+      const meta = chart.getDatasetMeta(datasetIndex);
+      meta.data.forEach((element, index) => {
+        const std = errorBars[index];
+        const mean = dataset.data[index];
+        if (std == null || mean == null) {
+          return;
+        }
+        const x = element.x;
+        const topY = yScale.getPixelForValue(mean + std);
+        const bottomY = yScale.getPixelForValue(Math.max(mean - std, 0));
+        ctx.beginPath();
+        ctx.moveTo(x, topY);
+        ctx.lineTo(x, bottomY);
+        ctx.moveTo(x - 6, topY);
+        ctx.lineTo(x + 6, topY);
+        ctx.moveTo(x - 6, bottomY);
+        ctx.lineTo(x + 6, bottomY);
+        ctx.stroke();
+      });
+    });
+
+    ctx.restore();
+  },
+};
+Chart.register(runtimeErrorBarPlugin);
+
+const metrics = JSON.parse(document.getElementById('runtimeExperimentMetricsData').textContent);
+const rows = JSON.parse(document.getElementById('runtimeExperimentRowsData').textContent);
+const manifest = JSON.parse(document.getElementById('runtimeExperimentManifestData').textContent);
+const chartRows = rows.filter((row) =>
+  row.row_type === 'base_pages' ||
+  row.row_type === 'no_break' ||
+  row.split_successes_total > 0
+);
+const splitRows = rows.filter((row) =>
+  row.row_type === 'hot_split_only' || row.row_type === 'random_split_only'
+);
+const successfulHotRows = rows.filter((row) =>
+  row.row_type === 'hot_split_only' && row.split_successes_total > 0
+);
+const successfulRandomRows = rows.filter((row) =>
+  row.row_type === 'random_split_only' && row.split_successes_total > 0
+);
+
+function formatSeconds(value) {
+  return value == null ? 'n/a' : `${value.toFixed(3)}s`;
+}
+
+function formatPercent(value) {
+  if (value == null) {
+    return 'n/a';
+  }
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function formatRatio(successes, expected) {
+  return `${successes}/${expected}`;
+}
+
+function rowColor(row) {
+  if (row.row_type === 'base_pages') return '#ff6e7d';
+  if (row.row_type === 'no_break') return '#79a8ff';
+  if (row.row_type === 'random_split_only') return '#59d2b2';
+  return '#f5b54a';
+}
+
+document.getElementById('headerTitle').textContent =
+  `${manifest.workload_label} · ${manifest.experiment_name}`;
+document.getElementById('basePagesRuntimeValue').textContent = formatSeconds(metrics.base_pages_runtime_s);
+document.getElementById('basePagesRuntimeDetail').innerHTML =
+  `<span class="chip ${metrics.base_pages_pct_vs_no_break > 0 ? 'red' : 'teal'}">${formatPercent(metrics.base_pages_pct_vs_no_break)}</span> versus <code>no_break</code>`;
+document.getElementById('hotSplitValue').textContent = formatPercent(metrics.hot_split_mean_runtime_pct);
+document.getElementById('hotSplitDetail').textContent =
+  `Successful hot rows: ${metrics.hot_rows_with_success}/${metrics.hot_rows} · success rate ${formatPercent(metrics.hot_split_success_rate_pct)}`;
+document.getElementById('randomSplitValue').textContent = formatPercent(metrics.random_split_mean_runtime_pct);
+document.getElementById('randomSplitDetail').textContent =
+  `Successful random rows: ${metrics.random_rows_with_success}/${metrics.random_rows} · success rate ${formatPercent(metrics.random_split_success_rate_pct)}`;
+document.getElementById('splitAttemptsValue').textContent =
+  `${metrics.observed_max_split_attempts} / ${metrics.configured_max_split_attempts}`;
+document.getElementById('splitAttemptsDetail').textContent =
+  `Observed max retry usage versus configured replay split limit.`;
+
+new Chart(document.getElementById('runtimeChart'), {
+  type: 'bar',
+  data: {
+    labels: chartRows.map((row) => row.short_label),
+    datasets: [{
+      label: 'Mean runtime (s)',
+      data: chartRows.map((row) => row.runtime_mean),
+      errorBars: chartRows.map((row) => row.runtime_std),
+      backgroundColor: chartRows.map(rowColor),
+      borderColor: 'rgba(255,255,255,0.18)',
+      borderWidth: 1.2,
+      borderRadius: 8,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      runtimeErrorBarPlugin: { color: 'rgba(255,255,255,0.78)' },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            const row = chartRows[ctx.dataIndex];
+            return [
+              `Runtime: ${formatSeconds(ctx.raw)}`,
+              `Std: ${formatSeconds(row.runtime_std)}`,
+              `Split success: ${formatRatio(row.split_successes_total, row.expected_split_events)}`,
+              `Split failures: ${row.split_failures_total}`,
+              `Observed max attempts: ${row.observed_max_attempts}`,
+            ];
+          },
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#e0e0e0', maxRotation: 45, minRotation: 45 },
+        grid: { display: false }
+      },
+      y: {
+        title: { display: true, text: 'Mean runtime (s)', color: '#e0e0e0' },
+        ticks: {
+          color: '#e0e0e0',
+          callback: (value) => `${value}s`,
+        },
+        grid: { color: 'rgba(255,255,255,0.08)' }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('scatterChart'), {
+  type: 'scatter',
+  data: {
+    datasets: chartRows
+      .filter((row) => row.row_type === 'hot_split_only' || row.row_type === 'random_split_only')
+      .map((row) => ({
+        label: row.short_label,
+        data: [{ x: row.access_count, y: row.runtime_pct_vs_no_break }],
+        backgroundColor: rowColor(row),
+        pointRadius: 6,
+        pointHoverRadius: 8,
+      }))
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.x.toLocaleString()} accesses, ${formatPercent(ctx.raw.y)} vs no_break`,
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: 'Accepted-trace access count', color: '#e0e0e0' },
+        ticks: { color: '#e0e0e0' },
+      },
+      y: {
+        title: { display: true, text: 'Runtime delta vs no_break (%)', color: '#e0e0e0' },
+        ticks: {
+          color: '#e0e0e0',
+          callback: (value) => `${value}%`,
+        }
+      }
+    }
+  }
+});
+
+const hotGroup = {
+  label: 'hot split mean',
+  mean: successfulHotRows.length
+    ? successfulHotRows.flatMap((row) => row.runtime_samples).reduce((sum, value) => sum + value, 0)
+      / successfulHotRows.flatMap((row) => row.runtime_samples).length
+    : null,
+  std: successfulHotRows.length
+    ? (() => {
+        const samples = successfulHotRows.flatMap((row) => row.runtime_samples);
+        const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+        if (samples.length <= 1) {
+          return 0;
+        }
+        const variance = samples.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (samples.length - 1);
+        return Math.sqrt(variance);
+      })()
+    : null,
+};
+const randomGroup = {
+  label: 'random split mean',
+  mean: successfulRandomRows.length
+    ? successfulRandomRows.flatMap((row) => row.runtime_samples).reduce((sum, value) => sum + value, 0)
+      / successfulRandomRows.flatMap((row) => row.runtime_samples).length
+    : null,
+  std: successfulRandomRows.length
+    ? (() => {
+        const samples = successfulRandomRows.flatMap((row) => row.runtime_samples);
+        const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+        if (samples.length <= 1) {
+          return 0;
+        }
+        const variance = samples.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / (samples.length - 1);
+        return Math.sqrt(variance);
+      })()
+    : null,
+};
+
+new Chart(document.getElementById('groupChart'), {
+  type: 'bar',
+  data: {
+    labels: ['base_pages', 'no_break', hotGroup.label, randomGroup.label],
+    datasets: [{
+      label: 'Mean runtime (s)',
+      data: [
+        metrics.base_pages_runtime_s,
+        metrics.no_break_runtime_s,
+        hotGroup.mean,
+        randomGroup.mean,
+      ],
+      errorBars: [
+        rows.find((row) => row.row_type === 'base_pages').runtime_std,
+        rows.find((row) => row.row_type === 'no_break').runtime_std,
+        hotGroup.std,
+        randomGroup.std,
+      ],
+      backgroundColor: ['#ff6e7d', '#79a8ff', '#f5b54a', '#59d2b2'],
+      borderRadius: 8,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      runtimeErrorBarPlugin: { color: 'rgba(255,255,255,0.78)' },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${formatSeconds(ctx.raw)}`,
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#e0e0e0' },
+        grid: { display: false }
+      },
+      y: {
+        ticks: {
+          color: '#e0e0e0',
+          callback: (value) => `${value}s`,
+        }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('splitOutcomeChart'), {
+  type: 'bar',
+  data: {
+    labels: splitRows.map((row) => row.short_label),
+    datasets: [
+      {
+        label: 'Successful splits',
+        data: splitRows.map((row) => row.split_successes_total),
+        backgroundColor: '#59d2b2',
+        borderRadius: 8,
+      },
+      {
+        label: 'Failed splits',
+        data: splitRows.map((row) => row.split_failures_total),
+        backgroundColor: '#ff6e7d',
+        borderRadius: 8,
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        labels: { color: '#e0e0e0' },
+      },
+      tooltip: {
+        callbacks: {
+          afterBody: (items) => {
+            const row = splitRows[items[0].dataIndex];
+            return [
+              `Expected split events: ${row.expected_split_events}`,
+              `Total syscall attempts: ${row.split_syscall_attempts_total}`,
+              `Observed max attempts: ${row.observed_max_attempts}`,
+            ];
+          },
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#e0e0e0', maxRotation: 45, minRotation: 45 },
+        grid: { display: false }
+      },
+      y: {
+        ticks: {
+          color: '#e0e0e0',
+          precision: 0,
+        }
+      }
+    }
+  }
+});
+
+const configCards = [
+  {
+    label: 'Capture config',
+    value: JSON.stringify(manifest.capture, null, 2),
+  },
+  {
+    label: 'Row layout',
+    value: JSON.stringify(manifest.row_layout, null, 2),
+  },
+  {
+    label: 'Verification config',
+    value: JSON.stringify(manifest.verification, null, 2),
+  },
+  {
+    label: 'Replay config',
+    value: JSON.stringify(manifest.replay, null, 2),
+  },
+];
+document.getElementById('configGrid').innerHTML = configCards.map((card) => `
+  <div class="kv">
+    <div class="label">${card.label}</div>
+    <div class="value mono pre-wrap">${card.value}</div>
+  </div>
+`).join('');
+
+const storyCards = [
+  {
+    title: 'base_pages vs no_break',
+    body: `base_pages averaged ${formatSeconds(metrics.base_pages_runtime_s)} and was ${formatPercent(metrics.base_pages_pct_vs_no_break)} versus no_break.`,
+  },
+  {
+    title: 'Hot split success rate',
+    body: `Hot rows succeeded on ${formatPercent(metrics.hot_split_success_rate_pct)} of expected split events.`,
+  },
+  {
+    title: 'Random split success rate',
+    body: `Random rows succeeded on ${formatPercent(metrics.random_split_success_rate_pct)} of expected split events.`,
+  },
+  {
+    title: 'Observed retry usage',
+    body: `Observed max split attempts was ${metrics.observed_max_split_attempts} with a configured limit of ${metrics.configured_max_split_attempts}.`,
+  },
+].concat((manifest.insights ?? []).map((insight, index) => ({
+  title: `manifest insight #${index + 1}`,
+  body: insight,
+})));
+document.getElementById('storyGrid').innerHTML = storyCards.map((story) => `
+  <div class="story">
+    <strong>${story.title}</strong>
+    <p>${story.body}</p>
+  </div>
+`).join('');
+
+document.getElementById('summaryTableWrap').innerHTML = `
+  <table class="summary">
+    <thead>
+      <tr>
+        <th>Label</th>
+        <th>Row Type</th>
+        <th>THP Mode</th>
+        <th>Key</th>
+        <th>Accesses</th>
+        <th>Mean Runtime</th>
+        <th>Std</th>
+        <th>Split Success</th>
+        <th>Split Failure</th>
+        <th>Attempts</th>
+        <th>Max Attempts</th>
+        <th>Samples</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${
+        rows.map((row) => `
+          <tr>
+            <td data-label="Label"><span class="chip ${
+              row.row_type === 'base_pages' ? 'red' :
+              row.row_type === 'no_break' ? 'blue' :
+              row.row_type === 'random_split_only' ? 'teal' : 'gold'
+            }">${row.short_label}</span></td>
+            <td data-label="Row Type">${row.row_type}</td>
+            <td data-label="THP Mode">${row.thp_mode}</td>
+            <td data-label="Key" class="mono">${row.key ?? '—'}</td>
+            <td data-label="Accesses">${row.access_count == null ? '—' : row.access_count.toLocaleString()}</td>
+            <td data-label="Mean Runtime">${formatSeconds(row.runtime_mean)}</td>
+            <td data-label="Std">${formatSeconds(row.runtime_std)}</td>
+            <td data-label="Split Success">${row.expected_split_events ? formatRatio(row.split_successes_total, row.expected_split_events) : '—'}</td>
+            <td data-label="Split Failure">${row.expected_split_events ? row.split_failures_total : '—'}</td>
+            <td data-label="Attempts">${row.expected_split_events ? row.split_syscall_attempts_total : '—'}</td>
+            <td data-label="Max Attempts">${row.expected_split_events ? row.observed_max_attempts : '—'}</td>
+            <td data-label="Samples" class="mono">${row.runtime_samples.map(formatSeconds).join(', ')}</td>
+          </tr>
+        `).join('')
+      }
+    </tbody>
+  </table>
+`;
+
+const footerLines = [
+  `Results parquet: ${metrics.results_path}`,
+  `Trace log: ${metrics.trace_path}`,
+  `Started: ${metrics.started_at_utc}`,
+  `Finished: ${metrics.finished_at_utc}`,
+  `Elapsed: ${metrics.elapsed_seconds.toFixed(1)}s`,
+  `Notes: ${(manifest.notes ?? []).join(' | ') || 'n/a'}`,
+];
+document.getElementById('footerMeta').innerHTML = footerLines.join('<br>');
+</script>
+</body>
+</html>

@@ -235,6 +235,7 @@ def run_collect(
     verbose: bool,
     collection_prefix: str | None,
     clean: bool,
+    config_text: str | None = None,
 ):
     if not benchmark.is_configured():
         raise BenchmarkNotConfiguredError(
@@ -330,7 +331,8 @@ def run_collect(
 
     tick = datetime.now()
 
-    benchmark.run()
+    run_dir = Path(output_dir / benchmark.name() / collection_id)
+    benchmark.run(run_dir=run_dir, config_text=config_text)
 
     if verbose:
         print(f"Started benchmark {benchmark.name()}")

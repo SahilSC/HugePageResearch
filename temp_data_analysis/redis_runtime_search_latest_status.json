@@ -1,0 +1,8 @@
+{
+  "timestamp_utc": "2026-04-13T01:21:16Z",
+  "state": "checkpointed",
+  "stage": "stage1_seed",
+  "artifact_root": "/KernMLOps/data/redis_thp_replication/runtime_search/20260412T201057Z",
+  "candidate_name": null,
+  "candidate_stage": null
+}

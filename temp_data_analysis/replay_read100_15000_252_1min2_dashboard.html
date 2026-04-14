@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Replay Read-Heavy 15000 2-5-2 1min-2</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0a1220;
+    --bg-accent: #11243d;
+    --card: rgba(10, 22, 39, 0.82);
+    --border: rgba(135, 178, 255, 0.16);
+    --text: #edf4ff;
+    --muted: #9eb0c9;
+    --blue: #79a8ff;
+    --teal: #5fd1b3;
+    --gold: #ffbf66;
+    --red: #ff6c7d;
+    --shadow: 0 20px 50px rgba(0, 0, 0, 0.28);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background:
+      radial-gradient(circle at top left, rgba(121, 168, 255, 0.18), transparent 30%),
+      radial-gradient(circle at top right, rgba(95, 209, 179, 0.14), transparent 28%),
+      linear-gradient(180deg, #0b1423 0%, #09111d 60%, #07101a 100%);
+    padding: 28px 20px 36px;
+  }
+  .page {
+    max-width: 1360px;
+    margin: 0 auto;
+  }
+  header { margin-bottom: 24px; }
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 999px;
+    background: rgba(121, 168, 255, 0.12);
+    border: 1px solid rgba(121, 168, 255, 0.16);
+    color: #cfe0ff;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  header h1 {
+    margin: 14px 0 10px;
+    font-size: clamp(2rem, 4vw, 3.4rem);
+    line-height: 1.04;
+    letter-spacing: -0.03em;
+  }
+  header p {
+    margin: 0;
+    max-width: 900px;
+    color: var(--muted);
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+  .notice {
+    margin-top: 14px;
+    display: inline-block;
+    padding: 10px 12px;
+    border-radius: 12px;
+    background: rgba(255, 191, 102, 0.09);
+    border: 1px solid rgba(255, 191, 102, 0.16);
+    color: #ffe4bb;
+    font-size: 0.88rem;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .stat {
+    background: linear-gradient(180deg, rgba(17, 36, 61, 0.96), rgba(10, 22, 39, 0.96));
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+  }
+  .stat .label {
+    color: var(--muted);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .stat .value {
+    margin-top: 10px;
+    font-size: clamp(1.7rem, 3vw, 2.45rem);
+    line-height: 1;
+    font-weight: 700;
+    letter-spacing: -0.04em;
+  }
+  .stat .detail {
+    margin-top: 10px;
+    color: var(--muted);
+    font-size: 0.92rem;
+    line-height: 1.45;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .card {
+    grid-column: span 6;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    padding: 20px 20px 18px;
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow);
+  }
+  .card.full-width {
+    grid-column: 1 / -1;
+  }
+  .card h2 {
+    margin: 0 0 8px;
+    font-size: 1.18rem;
+    line-height: 1.25;
+  }
+  .card .desc {
+    margin: 0 0 16px;
+    color: var(--muted);
+    font-size: 0.93rem;
+    line-height: 1.58;
+  }
+  .chart-wrap {
+    position: relative;
+    height: 360px;
+  }
+  .chart-wrap.tall { height: 460px; }
+  canvas {
+    width: 100% !important;
+    height: 100% !important;
+  }
+  .story-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .story {
+    background: rgba(17, 36, 61, 0.72);
+    border: 1px solid rgba(135, 178, 255, 0.12);
+    border-radius: 16px;
+    padding: 14px 16px;
+  }
+  .story strong {
+    display: block;
+    margin-bottom: 6px;
+    color: #ffffff;
+    font-size: 0.96rem;
+  }
+  .story p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .error-msg {
+    margin-top: 8px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 108, 125, 0.1);
+    border: 1px solid rgba(255, 108, 125, 0.22);
+    color: #ffdbe0;
+    font-size: 0.92rem;
+  }
+  table.summary {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+  }
+  table.summary th, table.summary td {
+    padding: 12px 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(135, 178, 255, 0.1);
+    vertical-align: top;
+  }
+  table.summary th {
+    color: #d8e6ff;
+    font-size: 0.84rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  table.summary td:first-child {
+    font-weight: 500;
+  }
+  table.summary thead th {
+    color: #fff;
+    border-bottom: 2px solid rgba(135, 178, 255, 0.1);
+  }
+  table.summary tbody tr:hover {
+    background: rgba(121, 168, 255, 0.05);
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .chip.red {
+    color: #ffdbe0;
+    background: rgba(255, 108, 125, 0.13);
+  }
+  .chip.teal {
+    color: #d9fff4;
+    background: rgba(95, 209, 179, 0.13);
+  }
+  .chip.blue {
+    color: #dce8ff;
+    background: rgba(121, 168, 255, 0.14);
+  }
+  .chip.gold {
+    color: #ffecce;
+    background: rgba(255, 191, 102, 0.14);
+  }
+  .mono {
+    font-family: "SFMono-Regular", ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 0.84rem;
+    color: #dfe9ff;
+    word-break: break-all;
+  }
+  @media (max-width: 1100px) {
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .card { grid-column: 1 / -1; }
+  }
+  @media (max-width: 720px) {
+    body { padding: 20px 14px 32px; }
+    .stats { grid-template-columns: 1fr; }
+    .story-grid { grid-template-columns: 1fr; }
+    .chart-wrap, .chart-wrap.tall { height: 320px; }
+    table.summary, table.summary thead, table.summary tbody, table.summary tr, table.summary td, table.summary th {
+      display: block;
+    }
+    table.summary thead { display: none; }
+    table.summary tr {
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(135, 178, 255, 0.1);
+    }
+    table.summary td {
+      border: none;
+      padding: 6px 0;
+    }
+    table.summary td::before {
+      content: attr(data-label);
+      display: block;
+      color: #d8e6ff;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 4px;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+<header>
+  <div class="eyebrow">Redis Replay · 15000 Items · Runtime Only</div>
+  <h1>100% Read · 15000 Items · 2-5-2 · 1min-2</h1>
+  <p>
+    Accepted runtime-only replay for the read-heavy 15000-item workload. This dashboard reads
+    <code>data/replay_read100_15000_252_1min2_results_9rows.parquet</code>. Row 1 is the THP-disabled
+    <code>base_pages</code> baseline, row 2 is the intact-THP
+    <code>no_break</code> row, the next five rows split the hottest keys one
+    at a time, and the final two rows split random non-hot keys one at a time.
+  </p>
+  <div class="notice">
+    This page is runtime-only. It is the Test 1 read-heavy result set with the
+    same visual structure used by the newer base-pages dashboards.
+  </div>
+</header>
+
+<section class="stats">
+  <article class="stat">
+    <div class="label">base_pages runtime</div>
+    <div class="value" id="basePagesRuntimeValue">--</div>
+    <div class="detail" id="basePagesRuntimeDetail">--</div>
+  </article>
+  <article class="stat">
+    <div class="label">Hot split mean</div>
+    <div class="value" id="hotSplitValue">--</div>
+    <div class="detail" id="hotSplitDetail">--</div>
+  </article>
+  <article class="stat">
+    <div class="label">Random split mean</div>
+    <div class="value" id="randomSplitValue">--</div>
+    <div class="detail" id="randomSplitDetail">--</div>
+  </article>
+  <article class="stat">
+    <div class="label">Runtime band</div>
+    <div class="value" id="runtimeBandValue">--</div>
+    <div class="detail" id="runtimeBandDetail">--</div>
+  </article>
+</section>
+
+<section class="grid">
+  <div class="card full-width">
+    <h2>Section 1 — Runtime Overview</h2>
+    <p class="desc">
+      Percentage runtime delta for each of the 9 replay rows relative to
+      <code>no_break</code>. <span class="chip red">Red</span> marks
+      <code>base_pages</code>, <span class="chip blue">blue</span> marks
+      <code>no_break</code>, <span class="chip gold">gold</span> are the hottest
+      split-only keys, and <span class="chip teal">teal</span> are the random split-only keys.
+    </p>
+    <div class="chart-wrap"><canvas id="runtimeChart"></canvas></div>
+    <div id="runtimeError"></div>
+  </div>
+
+  <div class="card">
+    <h2>Section 2 — Runtime Change vs Access Count</h2>
+    <p class="desc">
+      Each dot is one split-only-key row. The X-axis is accepted-trace access count, and the Y-axis is
+      runtime change (%) relative to <code>no_break</code>.
+    </p>
+    <div class="chart-wrap"><canvas id="scatterChart"></canvas></div>
+    <div id="scatterError"></div>
+  </div>
+
+  <div class="card">
+    <h2>Section 3 — Grouped Runtime View</h2>
+    <p class="desc">
+      Group means for <code>base_pages</code>, <code>no_break</code>, the five hot split rows,
+      and the two random split rows.
+    </p>
+    <div class="chart-wrap"><canvas id="groupChart"></canvas></div>
+    <div id="groupError"></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Section 4 — Split-Row Access Counts</h2>
+    <p class="desc">
+      Accepted-trace access counts for the seven split rows in this result set.
+      This keeps the hot-key ordering visible beside the runtime changes.
+    </p>
+    <div class="chart-wrap"><canvas id="accessChart"></canvas></div>
+    <div id="accessError"></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Section 5 — Important Insights</h2>
+    <p class="desc">
+      High-level runtime takeaways from this accepted replay run.
+    </p>
+    <div class="story-grid" id="storyGrid"></div>
+  </div>
+
+  <div class="card full-width">
+    <h2>Section 6 — Row Summary</h2>
+    <p class="desc">
+      Full per-row runtime samples and accepted-trace access counts.
+    </p>
+    <div id="summaryTableWrap"></div>
+    <div id="summaryError"></div>
+  </div>
+</section>
+</div>
+
+<script id="readmixMetricsData" type="application/json">
+{
+  "results_path": "/users/SahilSC/HugePageResearch/data/replay_read100_15000_252_1min2_results_9rows.parquet",
+  "trace_path": "/users/SahilSC/HugePageResearch/data/redis_traces/replay_read100_15000_252_1min2_monitor_run.log",
+  "workload_label": "100% read",
+  "rows": 9,
+  "hot_rows": 5,
+  "random_rows": 2,
+  "base_pages_runtime_s": 62.60716297698673,
+  "no_break_runtime_s": 62.50249176239595,
+  "base_pages_pct_vs_no_break": 0.16746726672705048,
+  "hot_split_mean_runtime_pct": 1.207332452357619,
+  "random_split_mean_runtime_pct": -1.507261113670788,
+  "runtime_min_s": 58.889053876977414,
+  "runtime_max_s": 65.440763913095,
+  "timed_runs": 18,
+  "split_rows_slower_than_no_break": 3
+}
+</script>
+<script id="readmixRowsData" type="application/json">
+[
+  {
+    "row_type": "base_pages",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      61.589193317107856,
+      63.6251326368656
+    ],
+    "runtime_mean": 62.60716297698673,
+    "runtime_std": 1.439626499085028,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "base_pages",
+    "runtime_delta_vs_no_break": 0.10467121459078044,
+    "runtime_pct_vs_no_break": 0.16746726672705048
+  },
+  {
+    "row_type": "no_break",
+    "key": null,
+    "access_count": null,
+    "runtime_samples": [
+      63.44889291096479,
+      61.55609061382711
+    ],
+    "runtime_mean": 62.50249176239595,
+    "runtime_std": 1.3384133397515263,
+    "hot_rank": null,
+    "random_rank": null,
+    "short_label": "no_break",
+    "runtime_delta_vs_no_break": 0.0,
+    "runtime_pct_vs_no_break": 0.0
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user8709897793643524497",
+    "access_count": 385,
+    "runtime_samples": [
+      64.36476726201363,
+      65.440763913095
+    ],
+    "runtime_mean": 64.90276558755431,
+    "runtime_std": 0.760844528513651,
+    "hot_rank": 1,
+    "random_rank": null,
+    "short_label": "hot#1",
+    "runtime_delta_vs_no_break": 2.400273825158365,
+    "runtime_pct_vs_no_break": 3.8402850150087486
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user1376500781575294655",
+    "access_count": 194,
+    "runtime_samples": [
+      60.64122452493757,
+      63.83452648599632
+    ],
+    "runtime_mean": 62.237875505466945,
+    "runtime_std": 2.258005471040943,
+    "hot_rank": 2,
+    "random_rank": null,
+    "short_label": "hot#2",
+    "runtime_delta_vs_no_break": -0.2646162569290027,
+    "runtime_pct_vs_no_break": -0.42336913212187577
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user4640345626374325581",
+    "access_count": 177,
+    "runtime_samples": [
+      61.67221375880763,
+      63.19047327898443
+    ],
+    "runtime_mean": 62.43134351889603,
+    "runtime_std": 1.0735716023180477,
+    "hot_rank": 3,
+    "random_rank": null,
+    "short_label": "hot#3",
+    "runtime_delta_vs_no_break": -0.07114824349991977,
+    "runtime_pct_vs_no_break": -0.11383265129715214
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user8493199810341118767",
+    "access_count": 100,
+    "runtime_samples": [
+      62.523242282914,
+      64.21547845099121
+    ],
+    "runtime_mean": 63.369360366952606,
+    "runtime_std": 1.1965916698165373,
+    "hot_rank": 4,
+    "random_rank": null,
+    "short_label": "hot#4",
+    "runtime_delta_vs_no_break": 0.8668686045566574,
+    "runtime_pct_vs_no_break": 1.3869344727120092
+  },
+  {
+    "row_type": "hot_split_only",
+    "key": "user5822375050137704963",
+    "access_count": 81,
+    "runtime_samples": [
+      63.80846042907797,
+      62.87989590293728
+    ],
+    "runtime_mean": 63.34417816600762,
+    "runtime_std": 0.656594273203355,
+    "hot_rank": 5,
+    "random_rank": null,
+    "short_label": "hot#5",
+    "runtime_delta_vs_no_break": 0.8416864036116749,
+    "runtime_pct_vs_no_break": 1.346644557486365
+  },
+  {
+    "row_type": "random_split_only",
+    "key": "user4256206140675789288",
+    "access_count": 1,
+    "runtime_samples": [
+      62.65111096506007,
+      58.889053876977414
+    ],
+    "runtime_mean": 60.77008242101874,
+    "runtime_std": 2.660176078194163,
+    "hot_rank": null,
+    "random_rank": 1,
+    "short_label": "rand#1",
+    "runtime_delta_vs_no_break": -1.7324093413772061,
+    "runtime_pct_vs_no_break": -2.7717444417463932
+  },
+  {
+    "row_type": "random_split_only",
+    "key": "user9094484155246688141",
+    "access_count": 1,
+    "runtime_samples": [
+      61.312674400862306,
+      63.38882479304448
+    ],
+    "runtime_mean": 62.35074959695339,
+    "runtime_std": 1.4680600210751236,
+    "hot_rank": null,
+    "random_rank": 2,
+    "short_label": "rand#2",
+    "runtime_delta_vs_no_break": -0.15174216544255614,
+    "runtime_pct_vs_no_break": -0.24277778559518293
+  }
+]
+</script>
+<script>
+Chart.defaults.color = '#a0a0b0';
+Chart.defaults.borderColor = 'rgba(255,255,255,0.07)';
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
+
+const metrics = JSON.parse(document.getElementById('readmixMetricsData').textContent);
+const rows = JSON.parse(document.getElementById('readmixRowsData').textContent);
+
+function formatSeconds(value) {
+  return `${value.toFixed(3)}s`;
+}
+
+function formatPercent(value) {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function rowColor(row) {
+  if (row.row_type === 'base_pages') return '#e94560';
+  if (row.row_type === 'no_break') return '#4f8cff';
+  if (row.row_type === 'random_split_only') return '#53c9b1';
+  return '#f5a623';
+}
+
+const hotRows = rows.filter((row) => row.row_type === 'hot_split_only');
+const randomRows = rows.filter((row) => row.row_type === 'random_split_only');
+const splitRows = rows.filter((row) =>
+  row.row_type === 'hot_split_only' || row.row_type === 'random_split_only'
+);
+const hotRuntimeMean = hotRows.reduce((sum, row) => sum + row.runtime_mean, 0) / hotRows.length;
+const randomRuntimeMean = randomRows.reduce((sum, row) => sum + row.runtime_mean, 0) / randomRows.length;
+
+document.getElementById('basePagesRuntimeValue').textContent = formatSeconds(metrics.base_pages_runtime_s);
+document.getElementById('basePagesRuntimeDetail').innerHTML =
+  `<span class="chip ${metrics.base_pages_pct_vs_no_break > 0 ? 'red' : 'teal'}">${formatPercent(metrics.base_pages_pct_vs_no_break)}</span> versus <code>no_break</code>`;
+document.getElementById('hotSplitValue').textContent = formatPercent(metrics.hot_split_mean_runtime_pct);
+document.getElementById('hotSplitDetail').textContent =
+  `Mean runtime delta across ${metrics.hot_rows} hottest split-only rows.`;
+document.getElementById('randomSplitValue').textContent = formatPercent(metrics.random_split_mean_runtime_pct);
+document.getElementById('randomSplitDetail').textContent =
+  `Mean runtime delta across ${metrics.random_rows} random split-only rows.`;
+document.getElementById('runtimeBandValue').textContent =
+  `${metrics.runtime_min_s.toFixed(1)}s-${metrics.runtime_max_s.toFixed(1)}s`;
+document.getElementById('runtimeBandDetail').textContent =
+  `Across ${metrics.timed_runs} timed runs from the runtime-only pass.`;
+
+new Chart(document.getElementById('runtimeChart'), {
+  type: 'bar',
+  data: {
+    labels: rows.map((row) => row.short_label),
+    datasets: [{
+      label: 'Runtime delta vs no_break (%)',
+      data: rows.map((row) => row.runtime_pct_vs_no_break),
+      backgroundColor: rows.map(rowColor),
+      borderColor: 'rgba(255,255,255,0.18)',
+      borderWidth: 1.2,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${formatPercent(ctx.raw)}`,
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#e0e0e0' },
+        grid: { display: false }
+      },
+      y: {
+        title: { display: true, text: 'Runtime delta vs no_break (%)', color: '#e0e0e0' },
+        ticks: {
+          color: '#e0e0e0',
+          callback: (value) => `${value}%`
+        },
+        grid: { color: 'rgba(255,255,255,0.08)' }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('scatterChart'), {
+  type: 'scatter',
+  data: {
+    datasets: splitRows.map((row) => ({
+      label: row.short_label,
+      data: [{ x: row.access_count, y: row.runtime_pct_vs_no_break }],
+      backgroundColor: rowColor(row),
+      pointRadius: 6,
+      pointHoverRadius: 8,
+    }))
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.x.toLocaleString()} accesses, ${formatPercent(ctx.raw.y)} vs no_break`,
+        }
+      }
+    },
+    scales: {
+      x: {
+        title: { display: true, text: 'Accepted-trace access count', color: '#e0e0e0' },
+        ticks: { color: '#e0e0e0' },
+      },
+      y: {
+        title: { display: true, text: 'Runtime delta vs no_break (%)', color: '#e0e0e0' },
+        ticks: {
+          color: '#e0e0e0',
+          callback: (value) => `${value}%`
+        }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('groupChart'), {
+  type: 'bar',
+  data: {
+    labels: ['base_pages', 'no_break', 'hot split mean', 'random split mean'],
+    datasets: [{
+      label: 'Mean runtime (s)',
+      data: [
+        metrics.base_pages_runtime_s,
+        metrics.no_break_runtime_s,
+        hotRuntimeMean,
+        randomRuntimeMean,
+      ],
+      backgroundColor: ['#e94560', '#4f8cff', '#f5a623', '#53c9b1'],
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${formatSeconds(ctx.raw)}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#e0e0e0' },
+        grid: { display: false }
+      },
+      y: {
+        ticks: {
+          color: '#e0e0e0',
+          callback: (value) => `${value}s`
+        }
+      }
+    }
+  }
+});
+
+new Chart(document.getElementById('accessChart'), {
+  type: 'bar',
+  data: {
+    labels: splitRows.map((row) => row.short_label),
+    datasets: [{
+      label: 'Accepted-trace access count',
+      data: splitRows.map((row) => row.access_count),
+      backgroundColor: splitRows.map(rowColor),
+      borderColor: 'rgba(255,255,255,0.18)',
+      borderWidth: 1.0,
+      borderRadius: 6,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => `${ctx.raw.toLocaleString()} accepted-trace accesses`,
+        }
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: '#e0e0e0' },
+        grid: { display: false }
+      },
+      y: {
+        ticks: {
+          color: '#e0e0e0',
+          callback: (value) => Number(value).toLocaleString(),
+        }
+      }
+    }
+  }
+});
+
+const storyCards = [
+  {
+    title: 'base_pages vs no_break',
+    body: `base_pages averaged ${formatSeconds(metrics.base_pages_runtime_s)} and was ${formatPercent(metrics.base_pages_pct_vs_no_break)} versus no_break.`,
+  },
+  {
+    title: 'Hot split average',
+    body: `The five hot split rows averaged ${formatPercent(metrics.hot_split_mean_runtime_pct)} versus no_break.`,
+  },
+  {
+    title: 'Random split average',
+    body: `The two random split rows averaged ${formatPercent(metrics.random_split_mean_runtime_pct)} versus no_break.`,
+  },
+  {
+    title: 'Runtime band',
+    body: `Timed runs ranged from ${formatSeconds(metrics.runtime_min_s)} to ${formatSeconds(metrics.runtime_max_s)} across ${metrics.timed_runs} timed runs.`,
+  },
+];
+
+document.getElementById('storyGrid').innerHTML = storyCards.map((story) => `
+  <div class="story">
+    <strong>${story.title}</strong>
+    <p>${story.body}</p>
+  </div>
+`).join('');
+
+document.getElementById('summaryTableWrap').innerHTML = `
+  <table class="summary">
+    <thead>
+      <tr>
+        <th>Label</th>
+        <th>Row Type</th>
+        <th>Key</th>
+        <th>Accesses</th>
+        <th>Mean Runtime</th>
+        <th>Delta vs no_break</th>
+        <th>Samples</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${
+        rows.map((row) => `
+          <tr>
+            <td data-label="Label"><span class="chip ${
+              row.row_type === 'base_pages' ? 'red' :
+              row.row_type === 'no_break' ? 'blue' :
+              row.row_type === 'random_split_only' ? 'teal' : 'gold'
+            }">${row.short_label}</span></td>
+            <td data-label="Row Type">${row.row_type}</td>
+            <td data-label="Key" class="mono">${row.key ?? '—'}</td>
+            <td data-label="Accesses">${row.access_count == null ? '—' : row.access_count.toLocaleString()}</td>
+            <td data-label="Mean Runtime">${formatSeconds(row.runtime_mean)}</td>
+            <td data-label="Delta vs no_break">${formatPercent(row.runtime_pct_vs_no_break)}</td>
+            <td data-label="Samples" class="mono">${row.runtime_samples.map(formatSeconds).join(', ')}</td>
+          </tr>
+        `).join('')
+      }
+    </tbody>
+  </table>
+`;
+</script>
+</body>
+</html>

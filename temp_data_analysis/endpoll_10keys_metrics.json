@@ -1,0 +1,14 @@
+{
+  "results_path": "/users/SahilSC/HugePageResearch/data/test2_endpoll_results_10keys_12rows.parquet",
+  "rows": 12,
+  "all_break_runtime_s": 25.20644021530946,
+  "no_break_runtime_s": 22.404874697017174,
+  "all_break_pct_slower_than_no_break": 12.504267737169128,
+  "split_rows": 10,
+  "split_rows_slower_than_no_break": 8,
+  "split_rows_faster_than_no_break": 2,
+  "split_mean_delta_s": 0.44091427179907045,
+  "split_median_delta_s": 0.4615191041569524,
+  "corr_access_vs_runtime_delta": -0.5106424923462368,
+  "corr_runtime_delta_vs_dtlb_misses": 0.38007168722402773
+}

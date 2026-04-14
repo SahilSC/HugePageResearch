@@ -1,0 +1,6 @@
+python python/kernmlops collect -v -c config/redis_always_outer10.yaml --benchmark redis
+python python/kernmlops collect -v -c config/redis_madvise_outer10.yaml --benchmark redis
+python python/kernmlops collect -v -c config/redis_never_outer10.yaml --benchmark redis
+python python/kernmlops collect -v -c config/redis_always_outer10_update50_delete50.yaml --benchmark redis
+python python/kernmlops collect -v -c config/redis_madvise_outer10_update50_delete50.yaml --benchmark redis
+python python/kernmlops collect -v -c config/redis_never_outer10_update50_delete50.yaml --benchmark redis
