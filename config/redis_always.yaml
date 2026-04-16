@@ -12,7 +12,7 @@ benchmark_config:
     field_count: 1
     min_field_length: 4096
     field_length: 2097152
-    outer_repeat: 1
+    outer_repeat: 10
     thread_count: 16
     record_count: 4096
     operation_count: 4096
