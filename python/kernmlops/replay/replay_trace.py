@@ -68,6 +68,14 @@ from replay.hardware_collectors import (
     DTLBCounterMetrics,
     HardwareCollector,
 )
+from replay.system_tuning import (
+    _KHUGEPAGED_SLEEP_PATH as SHARED_KHUGEPAGED_SLEEP_PATH,
+    _sysfs_write as shared_sysfs_write,
+    SystemConfig as SharedSystemConfig,
+    _set_thp_enabled_mode as shared_set_thp_enabled_mode,
+    setup_system as shared_setup_system,
+    teardown_system as shared_teardown_system,
+)
 from redis_runtime import load_repo_redis_endpoint
 
 logger = logging.getLogger(__name__)
@@ -93,17 +101,6 @@ SPLIT_THP_SYSCALL_NR: int = 462
 VAPTR_FIELD_NAME: str = "field0"
 REDIS_RESTORE_TIMEOUT_S: float = 300.0
 
-_THP_PATH = Path("/sys/kernel/mm/transparent_hugepage/enabled")
-_THP_DEFRAG_PATH = Path("/sys/kernel/mm/transparent_hugepage/defrag")
-_KHUGEPAGED_SLEEP_PATH = Path(
-    "/sys/kernel/mm/transparent_hugepage/khugepaged/scan_sleep_millisecs"
-)
-_NUMA_BALANCING_PATH = Path("/proc/sys/kernel/numa_balancing")
-_SWAPPINESS_PATH = Path("/proc/sys/vm/swappiness")
-_OVERCOMMIT_PATH = Path("/proc/sys/vm/overcommit_memory")
-_COMPACTION_PROACTIVENESS_PATH = Path("/proc/sys/vm/compaction_proactiveness")
-_KSM_PATH = Path("/sys/kernel/mm/ksm/run")
-
 _LIBC = ctypes.CDLL(None, use_errno=True)
 _LIBC.syscall.restype = ctypes.c_long
 
@@ -128,22 +125,8 @@ class RedisCommand:
     key: str = ""
 
 
-@dataclass(frozen=True)
-class SystemConfig:
-    """Saved state of kernel tunables modified during benchmarking.
-
-    Optional fields are ``None`` when the corresponding sysfs/procfs
-    path does not exist on the host kernel.
-    """
-
-    thp_enabled: str
-    thp_defrag: str
-    khugepaged_scan_sleep_ms: str
-    numa_balancing: str
-    swappiness: str
-    overcommit_memory: str
-    compaction_proactiveness: str | None
-    ksm_run: str | None
+SystemConfig = SharedSystemConfig
+_KHUGEPAGED_SLEEP_PATH = SHARED_KHUGEPAGED_SLEEP_PATH
 
 
 @dataclass(frozen=True)
@@ -742,10 +725,7 @@ def _break_page_for_pid(
 
 def _sysfs_write(path: Path, value: str) -> None:
     """Write *value* to a sysfs/procfs file via a privileged bash redirect."""
-    subprocess.check_call(
-        ["sudo", "bash", "-c", f"echo {value} > {path}"],
-        stdout=subprocess.DEVNULL,
-    )
+    shared_sysfs_write(path, value)
 
 
 def _set_thp_enabled_mode(mode: str) -> None:
@@ -765,11 +745,7 @@ def _set_thp_enabled_mode(mode: str) -> None:
     Raises:
         RuntimeError: If *mode* is not one of the supported replay modes.
     """
-    if mode not in {"always", "never"}:
-        raise RuntimeError(
-            f"Unsupported replay THP mode {mode!r}; expected 'always' or 'never'."
-        )
-    _sysfs_write(_THP_PATH, mode)
+    shared_set_thp_enabled_mode(mode)
 
 
 def _stage_snapshot_for_restore(snapshot_path: Path, rdb_path: Path) -> None:
@@ -806,34 +782,9 @@ def setup_system() -> SystemConfig:
         A ``SystemConfig`` holding the pre-modification values for use by
         :func:`teardown_system`.
     """
-    config = SystemConfig(
-        thp_enabled=_THP_PATH.read_text().strip(),
-        thp_defrag=_THP_DEFRAG_PATH.read_text().strip(),
-        khugepaged_scan_sleep_ms=_KHUGEPAGED_SLEEP_PATH.read_text().strip(),
-        numa_balancing=_NUMA_BALANCING_PATH.read_text().strip(),
-        swappiness=_SWAPPINESS_PATH.read_text().strip(),
-        overcommit_memory=_OVERCOMMIT_PATH.read_text().strip(),
-        compaction_proactiveness=(
-            _COMPACTION_PROACTIVENESS_PATH.read_text().strip()
-            if _COMPACTION_PROACTIVENESS_PATH.exists()
-            else None
-        ),
-        ksm_run=(_KSM_PATH.read_text().strip() if _KSM_PATH.exists() else None),
-    )
-
     logger.info("Setting up system configuration ...")
-    _sysfs_write(_THP_PATH, "always")
-    _sysfs_write(_THP_DEFRAG_PATH, "never")
-    _sysfs_write(_KHUGEPAGED_SLEEP_PATH, "4294967295")  # max uint32 — disables scanning
-    _sysfs_write(_NUMA_BALANCING_PATH, "0")
-    _sysfs_write(_SWAPPINESS_PATH, "0")
-    _sysfs_write(_OVERCOMMIT_PATH, "1")  # always allow
-    if config.compaction_proactiveness is not None:
-        _sysfs_write(_COMPACTION_PROACTIVENESS_PATH, "0")
-    if config.ksm_run is not None:
-        _sysfs_write(_KSM_PATH, "0")
+    config = shared_setup_system()
     logger.info("System configuration applied.")
-
     return config
 
 
@@ -844,25 +795,7 @@ def teardown_system(config: SystemConfig) -> None:
         config: The ``SystemConfig`` returned by :func:`setup_system`.
     """
     logger.info("Restoring system configuration ...")
-
-    # The THP and defrag files store e.g. "always [madvise] never"; restore
-    # only the bracketed (active) word.
-    for path, raw in [
-        (_THP_PATH, config.thp_enabled),
-        (_THP_DEFRAG_PATH, config.thp_defrag),
-    ]:
-        match = re.search(r"\[(\w+)\]", raw)
-        _sysfs_write(path, match.group(1) if match else raw)
-
-    _sysfs_write(_KHUGEPAGED_SLEEP_PATH, config.khugepaged_scan_sleep_ms)
-    _sysfs_write(_NUMA_BALANCING_PATH, config.numa_balancing)
-    _sysfs_write(_SWAPPINESS_PATH, config.swappiness)
-    _sysfs_write(_OVERCOMMIT_PATH, config.overcommit_memory)
-    if config.compaction_proactiveness is not None:
-        _sysfs_write(_COMPACTION_PROACTIVENESS_PATH, config.compaction_proactiveness)
-    if config.ksm_run is not None:
-        _sysfs_write(_KSM_PATH, config.ksm_run)
-
+    shared_teardown_system(config)
     logger.info("System configuration restored.")
 
 

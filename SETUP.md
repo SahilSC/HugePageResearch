@@ -40,6 +40,13 @@ make setup-redis
 make -C redis-module
 ```
 
+On the host, install the repo-managed GUPS benchmark:
+
+```bash
+cd ~/HugePageResearch
+scripts/setup-benchmarks/setup-gups.sh
+```
+
 ### 1.3 Install Host Packages
 
 Run this on the host:

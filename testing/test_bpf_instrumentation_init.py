@@ -18,6 +18,7 @@ class BPFInstrumentationInitTest(unittest.TestCase):
         self.assertEqual(bpf.hook_names()[-1], "vaptr")
         self.assertIn("perf", bpf.hook_names())
         self.assertIn("thp_trace", bpf.hook_names())
+        self.assertIn("smaps_rollup_hook", bpf.hook_names())
         self.assertIn("smaps_harness", bpf.hook_names())
         self.assertIn("vmstat_harness", bpf.hook_names())
         self.assertIn("thp_intervention", bpf.hook_names())

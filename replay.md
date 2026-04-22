@@ -1,4 +1,4 @@
-# Redis Replay Experiment Runbook
+# Replay Experiment Runbook
 
 This runbook matches the current replay workflow in this repository.
 
@@ -34,9 +34,14 @@ The supported replay entrypoints are:
 - `python/kernmlops/replay/capture_redis_trace.sh`
 - `python/kernmlops/replay/generate_breakpoints.py`
 - `python/kernmlops/replay/replay_trace.py`
+- `python/kernmlops/replay/generate_gups_breakpoints.py`
+- `python/kernmlops/replay/replay_gups.py`
 
 The replay entrypoints read Redis bind and port from `config/redis.conf`.
 `replay_trace.py` no longer takes separate `--host` or `--port` flags.
+
+The GUPS split harness is host-native rather than container-first. It uses the
+repo-managed benchmark binary installed by `scripts/setup-benchmarks/setup-gups.sh`.
 
 The captured inputs are:
 
@@ -179,8 +184,157 @@ The canonical replay entrypoints are:
 - `python/kernmlops/replay/capture_redis_trace.sh`
 - `python/kernmlops/replay/generate_breakpoints.py`
 - `python/kernmlops/replay/replay_trace.py`
+- `python/kernmlops/replay/generate_gups_breakpoints.py`
+- `python/kernmlops/replay/replay_gups.py`
 
 Use those paths directly.
+
+## Deterministic GUPS Split Harness
+
+The deterministic GUPS path does not replay an external trace in v1.
+
+Instead it:
+
+1. runs the seeded GUPS benchmark once in calibration mode
+2. writes one page-summary CSV for the 2 MiB table regions touched during the
+   timed update pass
+3. turns that CSV into a breakpoint matrix
+4. reruns the benchmark under `base_pages`, `no_break`, and split-only rows
+5. renders one dashboard from the result parquet plus preserved run artifacts
+
+The supported GUPS entrypoints are:
+
+- `python/kernmlops/replay/generate_gups_breakpoints.py`
+- `python/kernmlops/replay/replay_gups.py`
+- `temp_data_analysis/render_gups_split_harness.py`
+
+### GUPS Row Semantics
+
+`generate_gups_breakpoints.py` emits the same conceptual row kinds as the Redis
+generator, but the split trigger is page-local rather than key-local.
+
+`base_pages`:
+
+- first row
+- runner sets THP `enabled` to `never`
+- runner does not write a split schedule
+
+`no_break`:
+
+- second row
+- runner sets THP `enabled` to `always`
+- runner does not write a split schedule
+
+`split_only` rows:
+
+- runner sets THP `enabled` to `always`
+- runner writes one split-schedule CSV row per repeat
+- the current generator uses `break_after_page_accesses=1` so the page has been
+  faulted once before the in-benchmark `split_thp(pid, vaddr)` call
+
+### GUPS Calibration
+
+Install the benchmark on the host first:
+
+```bash
+cd ~/HugePageResearch
+scripts/setup-benchmarks/setup-gups.sh
+```
+
+Then run a small seeded calibration with THP forced on and quiet background
+memory management:
+
+```bash
+cd ~/HugePageResearch
+sudo -E HOME=$HOME PATH="$PATH" PYTHONPATH=python/kernmlops \
+  .venv/bin/python - <<'PY'
+from pathlib import Path
+import subprocess
+from replay.system_tuning import setup_system, teardown_system
+
+base = Path("temp_data_analysis/gups_split_harness_example/raw")
+base.mkdir(parents=True, exist_ok=True)
+config = setup_system()
+try:
+    subprocess.check_call([
+        str(Path.home() / "kernmlops-benchmark" / "gups" / "gups"),
+        "--results", str(base / "calibration_results.jsonl"),
+        "--table-size-mib", "64",
+        "--repeats", "1",
+        "--updates-multiplier", "4",
+        "--threads", "1",
+        "--stream-seed", "7",
+        "--page-summary-out", str(base / "calibration_page_summary.csv"),
+    ])
+finally:
+    teardown_system(config)
+PY
+```
+
+### Generate A GUPS Breakpoint Matrix
+
+```bash
+cd ~/HugePageResearch
+PYTHONPATH=python/kernmlops .venv/bin/python \
+  python/kernmlops/replay/generate_gups_breakpoints.py \
+  temp_data_analysis/gups_split_harness_example/raw/calibration_page_summary.csv \
+  --output temp_data_analysis/gups_split_harness_example/raw/breakpoints.parquet \
+  --hot-pages 10 \
+  --random-rows 3 \
+  --random-seed 0
+```
+
+### Run The GUPS Matrix In `tmux`
+
+```bash
+cd ~/HugePageResearch
+tmux new-session -d -s gups-split-example \
+  'cd ~/HugePageResearch && sudo -E HOME=$HOME PATH="$PATH" PYTHONPATH=python/kernmlops \
+  .venv/bin/python python/kernmlops/replay/replay_gups.py \
+  --breakpoints temp_data_analysis/gups_split_harness_example/raw/breakpoints.parquet \
+  --output temp_data_analysis/gups_split_harness_example/raw/gups_split_results.parquet \
+  --artifacts-dir temp_data_analysis/gups_split_harness_example/raw/gups_split_artifacts \
+  --table-size-mib 64 \
+  --repeats 4 \
+  --updates-multiplier 4 \
+  --stream-seed 7 \
+  --runs 3 \
+  --collector-config config/replay_collectors_dtlb.yaml \
+  -v |& tee temp_data_analysis/gups_split_harness_example/raw/gups_split_runtime.log'
+```
+
+This writes:
+
+- one result parquet
+- one metadata JSON beside that parquet
+- one `run_commands.log`
+- one per-row/per-run artifact tree containing `gups_results.jsonl`, stdout
+  logs, split schedules, and split-event CSVs
+
+### Render The GUPS Dashboard
+
+```bash
+cd ~/HugePageResearch
+PYTHONPATH=python/kernmlops .venv/bin/python \
+  temp_data_analysis/render_gups_split_harness.py \
+  --results temp_data_analysis/gups_split_harness_example/raw/gups_split_results.parquet \
+  --metadata temp_data_analysis/gups_split_harness_example/raw/gups_split_results.metadata.json \
+  --output-dir temp_data_analysis/gups_split_harness_example \
+  --label example
+```
+
+The renderer writes:
+
+- `runtime_mean_std.png`
+- `gups_mean_std.png`
+- `dtlb_loads_mean_std.png`
+- `dtlb_misses_mean_std.png`
+- `config.md`
+- `gups_split_harness_<label>.html`
+
+The HTML and `config.md` both preserve the exact input paths, command-log path,
+and any split-only rows that were omitted from the main charts because they
+never successfully split.
 
 ## Replay CLI Notes
 
