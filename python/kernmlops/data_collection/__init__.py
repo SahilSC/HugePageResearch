@@ -47,7 +47,7 @@ class GenericCollectorConfig(ConfigBase):
                         key_names=key_names,
                     )
                 )
-            elif hook_name in ["proc_maps", "smaps_hook"]:
+            elif hook_name in ["proc_maps", "smaps_hook", "smaps_rollup_hook"]:
                 process_name = "redis-server"
                 redis_server_name = getattr(benchmark, "redis_server_name", None)
                 if callable(redis_server_name):

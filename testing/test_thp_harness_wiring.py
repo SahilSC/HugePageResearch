@@ -29,6 +29,7 @@ class THPHarnessWiringTest(unittest.TestCase):
                 "thp_intervention",
                 "vmstat_harness",
                 "proc_maps",
+                "smaps_rollup_hook",
                 "smaps_hook",
             ]
         )
@@ -53,6 +54,7 @@ class THPHarnessWiringTest(unittest.TestCase):
                 "thp_intervention",
                 "vmstat_harness",
                 "proc_maps",
+                "smaps_rollup_hook",
                 "smaps_hook",
             ],
         )
@@ -61,6 +63,7 @@ class THPHarnessWiringTest(unittest.TestCase):
         self.assertEqual(hooks[3].sample_interval_ns, 123_000_000)
         self.assertEqual(hooks[4].pid_regex.pattern, "redis-server")
         self.assertEqual(hooks[5].pid_regex.pattern, "redis-server")
+        self.assertEqual(hooks[6].pid_regex.pattern, "redis-server")
 
 
 if __name__ == "__main__":

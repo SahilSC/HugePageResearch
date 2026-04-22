@@ -24,6 +24,7 @@ from data_collection.bpf_instrumentation.process_metadata_hook import (
 )
 from data_collection.bpf_instrumentation.quanta_runtime_hook import QuantaRuntimeBPFHook
 from data_collection.bpf_instrumentation.smaps_harness import SmapsHarnessHook
+from data_collection.bpf_instrumentation.smaps_rollup_hook import SmapsRollupHook
 from data_collection.bpf_instrumentation.thp_intervention_hook import (
     THPInterventionHook,
 )
@@ -52,6 +53,7 @@ all_hooks: Final[Mapping[str, type[BPFProgram]]] = {
     THPInterventionHook.name(): THPInterventionHook,
     VMStatHarnessHook.name(): VMStatHarnessHook,
     ProcMapsHook.name(): ProcMapsHook,
+    SmapsRollupHook.name(): SmapsRollupHook,
     ProcSmapsHook.name(): ProcSmapsHook,
     VAPtrHook.name(): VAPtrHook,
 }

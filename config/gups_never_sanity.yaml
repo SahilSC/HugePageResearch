@@ -1,0 +1,21 @@
+benchmark_config:
+  generic:
+    benchmark: gups
+    cpus: 0
+    skip_clear_page_cache: false
+    transparent_hugepages: never
+    overcommit_memory: never_check
+  gups:
+    table_size_gib: 16
+    repeats: 4
+    updates_multiplier: 4
+    threads: 0
+collector_config:
+  generic:
+    poll_rate: 1.0
+    output_dir: data
+    output_graphs: false
+    hooks:
+      - perf
+      - process_trace
+      - smaps_rollup_hook
