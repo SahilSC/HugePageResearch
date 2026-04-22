@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import statistics
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +43,10 @@ class RowSummary:
     split_max_attempts_max: int
     runtime_mean: float
     runtime_std: float
+    runtime_pct_vs_base_pages_mean: float
+    runtime_pct_vs_base_pages_std: float
+    speedup_pct_vs_base_pages_mean: float
+    speedup_pct_vs_base_pages_std: float
     gups_mean: float
     gups_std: float
     dtlb_loads_mean: float | None
@@ -69,8 +72,82 @@ def _sample_std(values: list[float]) -> float:
     return statistics.stdev(values) if len(values) > 1 else 0.0
 
 
+def _required_row_metric_values(
+    row: dict[str, object],
+    columns: list[str],
+    *,
+    metric_name: str,
+    row_label: str,
+) -> list[float]:
+    """Return all values for *columns* or fail fast when one is missing.
+
+    Example output:
+        [1.0, 1.2, 1.1]
+
+    Args:
+        row: One results-parquet row.
+        columns: Required metric columns in run order.
+        metric_name: Human-readable metric label for errors.
+        row_label: Row label for errors.
+
+    Returns:
+        The metric values in the same order as *columns*.
+
+    Raises:
+        RuntimeError: If one required metric value is missing.
+    """
+    values: list[float] = []
+    missing_columns: list[str] = []
+    for column in columns:
+        raw_value = row.get(column)
+        if raw_value is None:
+            missing_columns.append(column)
+            continue
+        values.append(float(raw_value))
+
+    if missing_columns:
+        missing_text = ", ".join(missing_columns)
+        raise RuntimeError(
+            f"Row {row_label!r} is missing required {metric_name} columns: "
+            f"{missing_text}"
+        )
+    return values
+
+
 def _row_metric_values(row: dict[str, object], columns: list[str]) -> list[float]:
     return [float(row[column]) for column in columns if row.get(column) is not None]
+
+
+def _base_runtime_values(
+    df: pl.DataFrame,
+    runtime_columns: list[str],
+) -> list[float]:
+    """Return the required per-run runtime values for the `base_pages` row."""
+    base_rows = [
+        row
+        for row in df.iter_rows(named=True)
+        if str(row.get("row_kind", "")) == "base_pages"
+    ]
+    if not base_rows:
+        raise RuntimeError(
+            "Results parquet is missing the required 'base_pages' baseline row."
+        )
+    if len(base_rows) != 1:
+        raise RuntimeError(
+            "Results parquet must contain exactly one 'base_pages' baseline row."
+        )
+
+    values = _required_row_metric_values(
+        base_rows[0],
+        runtime_columns,
+        metric_name="runtime_s",
+        row_label="base_pages",
+    )
+    if any(value <= 0.0 for value in values):
+        raise RuntimeError(
+            "All base_pages runtime values must be positive for normalization."
+        )
+    return values
 
 
 def load_row_summaries(results_path: Path) -> list[RowSummary]:
@@ -82,13 +159,53 @@ def load_row_summaries(results_path: Path) -> list[RowSummary]:
     dtlb_misses_columns = _metric_columns(df, "dtlb_misses")
     split_success_columns = _metric_columns(df, "split_successes")
     split_max_attempt_columns = _metric_columns(df, "split_max_attempts")
+    if not runtime_columns:
+        raise RuntimeError("Results parquet is missing required runtime_s_N columns.")
+    if not gups_columns:
+        raise RuntimeError("Results parquet is missing required gups_N columns.")
+    base_runtime_values = _base_runtime_values(df, runtime_columns)
 
     summaries: list[RowSummary] = []
     for row in df.iter_rows(named=True):
         row_kind = str(row.get("row_kind", ""))
         row_label = str(row.get("row_label", f"row {row.get('row_index', '?')}"))
-        runtime_values = _row_metric_values(row, runtime_columns)
-        gups_values = _row_metric_values(row, gups_columns)
+        runtime_values = _required_row_metric_values(
+            row,
+            runtime_columns,
+            metric_name="runtime_s",
+            row_label=row_label,
+        )
+        if len(runtime_values) != len(base_runtime_values):
+            raise RuntimeError(
+                f"Row {row_label!r} does not have the same number of runtime "
+                "runs as the base_pages baseline."
+            )
+        if any(value <= 0.0 for value in runtime_values):
+            raise RuntimeError(
+                f"Row {row_label!r} must have strictly positive runtime values."
+            )
+        runtime_pct_values = [
+            100.0 * ((runtime_value / base_runtime_value) - 1.0)
+            for runtime_value, base_runtime_value in zip(
+                runtime_values,
+                base_runtime_values,
+                strict=True,
+            )
+        ]
+        speedup_pct_values = [
+            100.0 * ((base_runtime_value / runtime_value) - 1.0)
+            for runtime_value, base_runtime_value in zip(
+                runtime_values,
+                base_runtime_values,
+                strict=True,
+            )
+        ]
+        gups_values = _required_row_metric_values(
+            row,
+            gups_columns,
+            metric_name="gups",
+            row_label=row_label,
+        )
         dtlb_loads_values = _row_metric_values(row, dtlb_loads_columns)
         dtlb_misses_values = _row_metric_values(row, dtlb_misses_columns)
         split_success_total = sum(int(row[column]) for column in split_success_columns)
@@ -112,6 +229,10 @@ def load_row_summaries(results_path: Path) -> list[RowSummary]:
                 split_max_attempts_max=split_max_attempts_max,
                 runtime_mean=statistics.mean(runtime_values),
                 runtime_std=_sample_std(runtime_values),
+                runtime_pct_vs_base_pages_mean=statistics.mean(runtime_pct_values),
+                runtime_pct_vs_base_pages_std=_sample_std(runtime_pct_values),
+                speedup_pct_vs_base_pages_mean=statistics.mean(speedup_pct_values),
+                speedup_pct_vs_base_pages_std=_sample_std(speedup_pct_values),
                 gups_mean=statistics.mean(gups_values),
                 gups_std=_sample_std(gups_values),
                 dtlb_loads_mean=(
@@ -173,6 +294,13 @@ def _render_config_markdown(
     lines = [
         "# GUPS Split Harness Config",
         "",
+        "- baseline row: `base_pages`",
+        "- baseline meaning: `THP never` with no page breaks",
+        "- `no_break` meaning: `THP always` with no page breaks",
+        "- split-only meaning: `THP always` with selected page breaks",
+        "- runtime percent formula: `100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)`",
+        "- speedup percent formula: `100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)`",
+        "",
         f"- results parquet: `{results_path}`",
         f"- metadata json: `{metadata_path}`",
         f"- breakpoints parquet: `{metadata.get('breakpoints_path', '')}`",
@@ -194,14 +322,18 @@ def _render_config_markdown(
     for summary in included:
         lines.append(
             f"- `{summary.display_label}`: split_success_total={summary.split_success_total}, "
-            f"split_max_attempts_max={summary.split_max_attempts_max}"
+            f"split_max_attempts_max={summary.split_max_attempts_max}, "
+            f"runtime_pct_vs_base_pages_mean={summary.runtime_pct_vs_base_pages_mean:.3f}, "
+            f"speedup_pct_vs_base_pages_mean={summary.speedup_pct_vs_base_pages_mean:.3f}"
         )
     lines.extend(["", "## Omitted Split-Only Rows", ""])
     if omitted:
         for summary in omitted:
             lines.append(
                 f"- `{summary.display_label}`: split_success_total={summary.split_success_total}, "
-                f"split_max_attempts_max={summary.split_max_attempts_max}"
+                f"split_max_attempts_max={summary.split_max_attempts_max}, "
+                f"runtime_pct_vs_base_pages_mean={summary.runtime_pct_vs_base_pages_mean:.3f}, "
+                f"speedup_pct_vs_base_pages_mean={summary.speedup_pct_vs_base_pages_mean:.3f}"
             )
     else:
         lines.append("- none")
@@ -216,6 +348,8 @@ def _render_html(
     metadata: dict[str, object],
     summaries: list[RowSummary],
     runtime_png: Path,
+    runtime_pct_png: Path,
+    speedup_pct_png: Path,
     gups_png: Path,
     dtlb_loads_png: Path | None,
     dtlb_misses_png: Path | None,
@@ -227,6 +361,8 @@ def _render_html(
                 "<tr>"
                 f"<td>{summary.display_label}</td>"
                 f"<td>{summary.runtime_mean:.6f} +/- {summary.runtime_std:.6f}</td>"
+                f"<td>{summary.runtime_pct_vs_base_pages_mean:.3f} +/- {summary.runtime_pct_vs_base_pages_std:.3f}</td>"
+                f"<td>{summary.speedup_pct_vs_base_pages_mean:.3f} +/- {summary.speedup_pct_vs_base_pages_std:.3f}</td>"
                 f"<td>{summary.gups_mean:.6f} +/- {summary.gups_std:.6f}</td>"
                 f"<td>{'' if summary.dtlb_loads_mean is None else f'{summary.dtlb_loads_mean:.3f} +/- {summary.dtlb_loads_std:.3f}'}</td>"
                 f"<td>{'' if summary.dtlb_misses_mean is None else f'{summary.dtlb_misses_mean:.3f} +/- {summary.dtlb_misses_std:.3f}'}</td>"
@@ -250,6 +386,8 @@ def _render_html(
 
     images_html = [
         f'<img src="{runtime_png.name}" alt="runtime graph" style="max-width: 100%;">',
+        f'<img src="{runtime_pct_png.name}" alt="runtime percent change graph" style="max-width: 100%;">',
+        f'<img src="{speedup_pct_png.name}" alt="speedup percent graph" style="max-width: 100%;">',
         f'<img src="{gups_png.name}" alt="gups graph" style="max-width: 100%;">',
     ]
     if dtlb_loads_png is not None:
@@ -275,11 +413,20 @@ def _render_html(
                 f"<li>Commands log: {metadata.get('commands_log_path', '')}</li>",
                 f"<li>Artifacts dir: {metadata.get('artifacts_dir', '')}</li>",
                 "</ul>",
+                "<h2>Row Meanings</h2>",
+                "<ul>",
+                "<li><code>base_pages</code> means THP never with no page breaks.</li>",
+                "<li><code>no_break</code> means THP always with no page breaks.</li>",
+                "<li>Split-only rows mean THP always with selected page breaks.</li>",
+                "<li>The normalization baseline is always <code>base_pages</code>.</li>",
+                "<li>Runtime percent formula: <code>100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)</code></li>",
+                "<li>Speedup percent formula: <code>100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)</code></li>",
+                "</ul>",
                 "<h2>Main Graphs</h2>",
                 *images_html,
                 "<h2>Row Summary</h2>",
                 "<table border='1' cellspacing='0' cellpadding='4'>",
-                "<tr><th>Row</th><th>Runtime</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Max split attempts</th></tr>",
+                "<tr><th>Row</th><th>Runtime</th><th>Runtime % vs base_pages</th><th>Speedup % vs base_pages</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Max split attempts</th></tr>",
                 rows_html,
                 "</table>",
                 "<h2>Omitted Split-Only Rows</h2>",
@@ -305,6 +452,8 @@ def render_dashboard(
     summaries = load_row_summaries(results_path)
 
     runtime_png = output_dir / "runtime_mean_std.png"
+    runtime_pct_png = output_dir / "runtime_pct_vs_base_pages.png"
+    speedup_pct_png = output_dir / "speedup_pct_vs_base_pages.png"
     gups_png = output_dir / "gups_mean_std.png"
     _plot_bar_metric(
         summaries=summaries,
@@ -313,6 +462,22 @@ def render_dashboard(
         value_getter=lambda summary: summary.runtime_mean,
         std_getter=lambda summary: summary.runtime_std,
         output_path=runtime_png,
+    )
+    _plot_bar_metric(
+        summaries=summaries,
+        title="Runtime Percent Change Vs base_pages",
+        ylabel="Runtime % vs base_pages",
+        value_getter=lambda summary: summary.runtime_pct_vs_base_pages_mean,
+        std_getter=lambda summary: summary.runtime_pct_vs_base_pages_std,
+        output_path=runtime_pct_png,
+    )
+    _plot_bar_metric(
+        summaries=summaries,
+        title="Speedup Percent Vs base_pages",
+        ylabel="Speedup % vs base_pages",
+        value_getter=lambda summary: summary.speedup_pct_vs_base_pages_mean,
+        std_getter=lambda summary: summary.speedup_pct_vs_base_pages_std,
+        output_path=speedup_pct_png,
     )
     _plot_bar_metric(
         summaries=summaries,
@@ -368,12 +533,16 @@ def render_dashboard(
         metadata=metadata,
         summaries=summaries,
         runtime_png=runtime_png,
+        runtime_pct_png=runtime_pct_png,
+        speedup_pct_png=speedup_pct_png,
         gups_png=gups_png,
         dtlb_loads_png=dtlb_loads_png,
         dtlb_misses_png=dtlb_misses_png,
     )
     return {
         "runtime_png": runtime_png,
+        "runtime_pct_png": runtime_pct_png,
+        "speedup_pct_png": speedup_pct_png,
         "gups_png": gups_png,
         "dtlb_loads_png": dtlb_loads_png if dtlb_loads_png is not None else Path(),
         "dtlb_misses_png": dtlb_misses_png if dtlb_misses_png is not None else Path(),

@@ -25,6 +25,105 @@ SPEC.loader.exec_module(RENDER)
 
 
 class RenderGUPSSplitHarnessTest(unittest.TestCase):
+    def test_load_row_summaries_normalizes_against_base_pages(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results_path = Path(tmpdir) / "results.parquet"
+            pl.DataFrame(
+                [
+                    {
+                        "row_kind": "base_pages",
+                        "row_label": "base_pages",
+                        "runtime_s_1": 1.0,
+                        "runtime_s_2": 1.2,
+                        "gups_1": 2.0,
+                        "gups_2": 1.8,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 0,
+                        "split_max_attempts_2": 0,
+                    },
+                    {
+                        "row_kind": "no_break",
+                        "row_label": "no_break",
+                        "runtime_s_1": 0.8,
+                        "runtime_s_2": 0.9,
+                        "gups_1": 2.5,
+                        "gups_2": 2.4,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 0,
+                        "split_max_attempts_2": 0,
+                    },
+                ]
+            ).write_parquet(results_path)
+
+            summaries = RENDER.load_row_summaries(results_path)
+
+        self.assertEqual(summaries[0].runtime_pct_vs_base_pages_mean, 0.0)
+        self.assertEqual(summaries[0].speedup_pct_vs_base_pages_mean, 0.0)
+        self.assertAlmostEqual(
+            summaries[1].runtime_pct_vs_base_pages_mean,
+            (((0.8 / 1.0) - 1.0) * 100.0 + ((0.9 / 1.2) - 1.0) * 100.0) / 2.0,
+        )
+        self.assertAlmostEqual(
+            summaries[1].speedup_pct_vs_base_pages_mean,
+            (((1.0 / 0.8) - 1.0) * 100.0 + ((1.2 / 0.9) - 1.0) * 100.0) / 2.0,
+        )
+
+    def test_load_row_summaries_requires_base_pages_baseline(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results_path = Path(tmpdir) / "results.parquet"
+            pl.DataFrame(
+                [
+                    {
+                        "row_kind": "no_break",
+                        "row_label": "no_break",
+                        "runtime_s_1": 0.8,
+                        "gups_1": 2.5,
+                        "split_successes_1": 0,
+                        "split_max_attempts_1": 0,
+                    }
+                ]
+            ).write_parquet(results_path)
+
+            with self.assertRaisesRegex(RuntimeError, "base_pages"):
+                RENDER.load_row_summaries(results_path)
+
+    def test_load_row_summaries_fails_fast_for_missing_runtime_run(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results_path = Path(tmpdir) / "results.parquet"
+            pl.DataFrame(
+                [
+                    {
+                        "row_kind": "base_pages",
+                        "row_label": "base_pages",
+                        "runtime_s_1": 1.0,
+                        "runtime_s_2": 1.2,
+                        "gups_1": 2.0,
+                        "gups_2": 1.8,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 0,
+                        "split_max_attempts_2": 0,
+                    },
+                    {
+                        "row_kind": "no_break",
+                        "row_label": "no_break",
+                        "runtime_s_1": 0.8,
+                        "runtime_s_2": None,
+                        "gups_1": 2.5,
+                        "gups_2": 2.4,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 0,
+                        "split_max_attempts_2": 0,
+                    },
+                ]
+            ).write_parquet(results_path)
+
+            with self.assertRaisesRegex(RuntimeError, "missing required runtime_s"):
+                RENDER.load_row_summaries(results_path)
+
     def test_load_row_summaries_omits_unsplittable_split_rows(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             results_path = Path(tmpdir) / "results.parquet"
@@ -156,11 +255,19 @@ class RenderGUPSSplitHarnessTest(unittest.TestCase):
             )
 
             self.assertTrue(outputs["runtime_png"].is_file())
+            self.assertTrue(outputs["runtime_pct_png"].is_file())
+            self.assertTrue(outputs["speedup_pct_png"].is_file())
             self.assertTrue(outputs["gups_png"].is_file())
             self.assertTrue(outputs["html"].is_file())
             config_text = outputs["config_md"].read_text(encoding="utf-8")
+            self.assertIn("baseline row: `base_pages`", config_text)
+            self.assertIn("runtime percent formula", config_text)
             self.assertIn("Omitted Split-Only Rows", config_text)
             self.assertIn("random page #1", config_text)
+            html_text = outputs["html"].read_text(encoding="utf-8")
+            self.assertIn("The normalization baseline is always <code>base_pages</code>.", html_text)
+            self.assertIn("Runtime % vs base_pages", html_text)
+            self.assertIn("Speedup % vs base_pages", html_text)
 
 
 if __name__ == "__main__":
