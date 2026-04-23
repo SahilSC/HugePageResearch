@@ -34,6 +34,8 @@ typedef struct {
     const char *page_summary_out;
     const char *split_schedule;
     const char *split_events_out;
+    const char *pre_split_pages;
+    const char *pre_split_events_out;
 } config_t;
 
 typedef struct {
@@ -77,6 +79,16 @@ typedef struct {
 } split_schedule_t;
 
 typedef struct {
+    uint64_t page_index;
+    char *label;
+} pre_split_page_entry_t;
+
+typedef struct {
+    pre_split_page_entry_t *entries;
+    size_t count;
+} pre_split_pages_t;
+
+typedef struct {
     int attempts;
     int success;
     int error_errno;
@@ -117,7 +129,8 @@ static void usage(FILE *stream, const char *argv0) {
         "Usage: %s --results <path> [--table-size-gib N | --table-size-mib N] "
         "[--repeats N] [--updates-multiplier N] [--threads N] "
         "[--stream-seed N] [--page-summary-out <csv>] "
-        "[--split-schedule <csv>] [--split-events-out <csv>]\n",
+        "[--split-schedule <csv>] [--split-events-out <csv>] "
+        "[--pre-split-pages <csv>] [--pre-split-events-out <csv>]\n",
         argv0
     );
 }
@@ -234,6 +247,8 @@ static config_t parse_args(int argc, char **argv) {
     cfg.page_summary_out = NULL;
     cfg.split_schedule = NULL;
     cfg.split_events_out = NULL;
+    cfg.pre_split_pages = NULL;
+    cfg.pre_split_events_out = NULL;
 
     for (i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--results") == 0) {
@@ -313,6 +328,24 @@ static config_t parse_args(int argc, char **argv) {
             deterministic_mode = true;
             continue;
         }
+        if (strcmp(argv[i], "--pre-split-pages") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "--pre-split-pages requires a path\n");
+                exit(2);
+            }
+            cfg.pre_split_pages = argv[++i];
+            deterministic_mode = true;
+            continue;
+        }
+        if (strcmp(argv[i], "--pre-split-events-out") == 0) {
+            if (i + 1 >= argc) {
+                fprintf(stderr, "--pre-split-events-out requires a path\n");
+                exit(2);
+            }
+            cfg.pre_split_events_out = argv[++i];
+            deterministic_mode = true;
+            continue;
+        }
         if (strcmp(argv[i], "--help") == 0) {
             usage(stdout, argv[0]);
             exit(0);
@@ -344,10 +377,14 @@ static config_t parse_args(int argc, char **argv) {
         fprintf(stderr, "--threads must be non-negative\n");
         exit(2);
     }
+    if (cfg.pre_split_events_out != NULL && cfg.pre_split_pages == NULL) {
+        fprintf(stderr, "--pre-split-events-out requires --pre-split-pages\n");
+        exit(2);
+    }
     if (deterministic_mode && cfg.threads != 1) {
         fprintf(
             stderr,
-            "Deterministic page-summary and split-schedule modes require --threads 1\n"
+            "Deterministic page-summary and split modes require --threads 1\n"
         );
         exit(2);
     }
@@ -527,6 +564,13 @@ static void write_split_events_header(FILE *stream) {
     );
 }
 
+static void write_pre_split_events_header(FILE *stream) {
+    fprintf(
+        stream,
+        "repeat_index,page_index,label,split_vaddr_hex,attempts,success,error_errno,error_text,anon_hugepages_kb_before,anon_hugepages_kb_after,split_wall_us\n"
+    );
+}
+
 static void free_split_schedule(split_schedule_t *schedule) {
     size_t index;
     for (index = 0; index < schedule->count; ++index) {
@@ -535,6 +579,16 @@ static void free_split_schedule(split_schedule_t *schedule) {
     free(schedule->entries);
     schedule->entries = NULL;
     schedule->count = 0;
+}
+
+static void free_pre_split_pages(pre_split_pages_t *pages) {
+    size_t index;
+    for (index = 0; index < pages->count; ++index) {
+        free(pages->entries[index].label);
+    }
+    free(pages->entries);
+    pages->entries = NULL;
+    pages->count = 0;
 }
 
 static void append_split_schedule_entry(
@@ -554,6 +608,25 @@ static void append_split_schedule_entry(
     resized[schedule->count] = entry;
     schedule->entries = resized;
     schedule->count = new_count;
+}
+
+static void append_pre_split_page_entry(
+    pre_split_pages_t *pages,
+    pre_split_page_entry_t entry
+) {
+    size_t new_count = pages->count + 1;
+    pre_split_page_entry_t *resized = realloc(
+        pages->entries,
+        new_count * sizeof(pre_split_page_entry_t)
+    );
+    if (resized == NULL) {
+        perror("realloc pre-split pages");
+        free_pre_split_pages(pages);
+        exit(1);
+    }
+    resized[pages->count] = entry;
+    pages->entries = resized;
+    pages->count = new_count;
 }
 
 static split_schedule_t load_split_schedule(
@@ -696,6 +769,193 @@ static split_schedule_t load_split_schedule(
     return schedule;
 }
 
+static pre_split_pages_t load_pre_split_pages(
+    const char *path,
+    uint64_t page_count
+) {
+    FILE *stream = fopen(path, "r");
+    pre_split_pages_t pages;
+    char *line = NULL;
+    size_t line_cap = 0;
+    ssize_t line_len;
+    bool saw_header = false;
+
+    pages.entries = NULL;
+    pages.count = 0;
+
+    if (stream == NULL) {
+        fprintf(stderr, "failed to open pre-split pages '%s': %s\n", path, strerror(errno));
+        exit(1);
+    }
+
+    while ((line_len = getline(&line, &line_cap, stream)) != -1) {
+        char *field1;
+        char *field2;
+        char *comma1;
+        pre_split_page_entry_t entry;
+
+        if (line_len == 0) {
+            continue;
+        }
+        strip_newline(line);
+        if (line[0] == '\0') {
+            continue;
+        }
+        if (!saw_header) {
+            if (strcmp(line, "page_index,label") != 0) {
+                fprintf(stderr, "unexpected pre-split pages header: %s\n", line);
+                free(line);
+                fclose(stream);
+                free_pre_split_pages(&pages);
+                exit(1);
+            }
+            saw_header = true;
+            continue;
+        }
+
+        field1 = line;
+        comma1 = strchr(field1, ',');
+        if (comma1 == NULL) {
+            fprintf(stderr, "malformed pre-split pages row: %s\n", line);
+            free(line);
+            fclose(stream);
+            free_pre_split_pages(&pages);
+            exit(1);
+        }
+        *comma1 = '\0';
+        field2 = comma1 + 1;
+
+        if (parse_u64(field1, &entry.page_index) != 0) {
+            fprintf(stderr, "malformed pre-split page_index: %s\n", field1);
+            free(line);
+            fclose(stream);
+            free_pre_split_pages(&pages);
+            exit(1);
+        }
+        if (entry.page_index >= page_count) {
+            fprintf(
+                stderr,
+                "pre-split page_index %" PRIu64 " is outside page_count %" PRIu64 "\n",
+                entry.page_index,
+                page_count
+            );
+            free(line);
+            fclose(stream);
+            free_pre_split_pages(&pages);
+            exit(1);
+        }
+        entry.label = strdup(field2);
+        if (entry.label == NULL) {
+            perror("strdup pre-split page label");
+            free(line);
+            fclose(stream);
+            free_pre_split_pages(&pages);
+            exit(1);
+        }
+        append_pre_split_page_entry(&pages, entry);
+    }
+
+    free(line);
+    fclose(stream);
+
+    if (!saw_header) {
+        fprintf(stderr, "pre-split pages '%s' is missing the CSV header\n", path);
+        free_pre_split_pages(&pages);
+        exit(1);
+    }
+    if (pages.count == 0) {
+        fprintf(stderr, "pre-split pages '%s' did not contain any page rows\n", path);
+        free_pre_split_pages(&pages);
+        exit(1);
+    }
+
+    return pages;
+}
+
+static void accumulate_split_result(
+    repeat_result_t *result,
+    const split_event_result_t *split_event
+) {
+    double split_wall_ms = (double)split_event->split_wall_us / 1000.0;
+
+    result->split_events += UINT64_C(1);
+    result->split_syscall_attempts += (uint64_t)split_event->attempts;
+    if ((uint64_t)split_event->attempts > result->split_max_attempts) {
+        result->split_max_attempts = (uint64_t)split_event->attempts;
+    }
+    result->split_total_wall_ms += split_wall_ms;
+    if (split_wall_ms > result->split_max_wall_ms) {
+        result->split_max_wall_ms = split_wall_ms;
+    }
+    if (split_event->success) {
+        result->split_successes += UINT64_C(1);
+    } else {
+        result->split_failures += UINT64_C(1);
+    }
+}
+
+static void write_pre_split_event_row(
+    FILE *stream,
+    int repeat_index,
+    const pre_split_page_entry_t *entry,
+    uint64_t split_vaddr,
+    const split_event_result_t *split_event
+) {
+    fprintf(
+        stream,
+        "%d,%" PRIu64 ",",
+        repeat_index,
+        entry->page_index
+    );
+    csv_write_escaped(stream, entry->label);
+    fprintf(
+        stream,
+        ",0x%016" PRIx64 ",%d,%d,%d,",
+        split_vaddr,
+        split_event->attempts,
+        split_event->success,
+        split_event->error_errno
+    );
+    csv_write_escaped(stream, split_event->error_text);
+    fprintf(
+        stream,
+        ",%" PRId64 ",%" PRId64 ",%" PRIu64 "\n",
+        split_event->anon_hugepages_kb_before,
+        split_event->anon_hugepages_kb_after,
+        split_event->split_wall_us
+    );
+}
+
+static void pre_split_table_pages(
+    uint64_t *table,
+    const pre_split_pages_t *pages,
+    FILE *pre_split_events_stream,
+    int repeat_index,
+    repeat_result_t *result
+) {
+    size_t entry_index;
+    pid_t pid = getpid();
+
+    for (entry_index = 0; entry_index < pages->count; ++entry_index) {
+        const pre_split_page_entry_t *entry = &pages->entries[entry_index];
+        uint64_t split_vaddr = (uint64_t)((uintptr_t)table) + (entry->page_index * THP_BYTES);
+        split_event_result_t split_event = split_table_page(pid, split_vaddr);
+
+        accumulate_split_result(result, &split_event);
+
+        if (pre_split_events_stream != NULL) {
+            write_pre_split_event_row(
+                pre_split_events_stream,
+                repeat_index,
+                entry,
+                split_vaddr,
+                &split_event
+            );
+            fflush(pre_split_events_stream);
+        }
+    }
+}
+
 static void reset_page_summary(page_summary_t *summaries, uint64_t page_count) {
     uint64_t page_index;
     for (page_index = 0; page_index < page_count; ++page_index) {
@@ -792,20 +1052,7 @@ static uint64_t random_access_update_instrumented(
             split_vaddr = (uint64_t)((uintptr_t)table) + (page_index * THP_BYTES);
             split_event = split_table_page(getpid(), split_vaddr);
 
-            result->split_events += UINT64_C(1);
-            result->split_syscall_attempts += (uint64_t)split_event.attempts;
-            if ((uint64_t)split_event.attempts > result->split_max_attempts) {
-                result->split_max_attempts = (uint64_t)split_event.attempts;
-            }
-            result->split_total_wall_ms += (double)split_event.split_wall_us / 1000.0;
-            if (((double)split_event.split_wall_us / 1000.0) > result->split_max_wall_ms) {
-                result->split_max_wall_ms = (double)split_event.split_wall_us / 1000.0;
-            }
-            if (split_event.success) {
-                result->split_successes += UINT64_C(1);
-            } else {
-                result->split_failures += UINT64_C(1);
-            }
+            accumulate_split_result(result, &split_event);
 
             if (split_events_stream != NULL) {
                 fprintf(
@@ -917,11 +1164,13 @@ int main(int argc, char **argv) {
     FILE *results = NULL;
     FILE *page_summary_stream = NULL;
     FILE *split_events_stream = NULL;
+    FILE *pre_split_events_stream = NULL;
     uint64_t *table = NULL;
     uint64_t updates = cfg.table_words * cfg.updates_multiplier;
     uint64_t page_count = (cfg.table_bytes + THP_BYTES - UINT64_C(1)) / THP_BYTES;
     page_summary_t *page_summaries = NULL;
     split_schedule_t split_schedule = {0};
+    pre_split_pages_t pre_split_pages = {0};
     int repeat_index;
     int failures = 0;
     bool instrumented_mode = false;
@@ -1012,8 +1261,34 @@ int main(int argc, char **argv) {
         write_split_events_header(split_events_stream);
     }
 
+    if (cfg.pre_split_events_out != NULL) {
+        pre_split_events_stream = fopen(cfg.pre_split_events_out, "w");
+        if (pre_split_events_stream == NULL) {
+            fprintf(
+                stderr,
+                "failed to open pre-split events file '%s': %s\n",
+                cfg.pre_split_events_out,
+                strerror(errno)
+            );
+            if (split_events_stream != NULL) {
+                fclose(split_events_stream);
+            }
+            free(page_summaries);
+            if (page_summary_stream != NULL) {
+                fclose(page_summary_stream);
+            }
+            fclose(results);
+            munmap(table, (size_t)cfg.table_bytes);
+            return 1;
+        }
+        write_pre_split_events_header(pre_split_events_stream);
+    }
+
     if (cfg.split_schedule != NULL) {
         split_schedule = load_split_schedule(cfg.split_schedule, page_count, cfg.repeats);
+    }
+    if (cfg.pre_split_pages != NULL) {
+        pre_split_pages = load_pre_split_pages(cfg.pre_split_pages, page_count);
     }
 
     for (repeat_index = 0; repeat_index < cfg.repeats; ++repeat_index) {
@@ -1037,6 +1312,16 @@ int main(int argc, char **argv) {
         result.updates = updates;
         result.stream_seed = cfg.stream_seed;
         result.threads = (cfg.threads > 0) ? cfg.threads : omp_get_max_threads();
+
+        if (pre_split_pages.count > 0) {
+            pre_split_table_pages(
+                table,
+                &pre_split_pages,
+                pre_split_events_stream,
+                repeat_index,
+                &result
+            );
+        }
 
         start_ns = now_boottime_ns();
         if (instrumented_mode) {
@@ -1133,6 +1418,10 @@ int main(int argc, char **argv) {
     }
 
     free_split_schedule(&split_schedule);
+    free_pre_split_pages(&pre_split_pages);
+    if (pre_split_events_stream != NULL) {
+        fclose(pre_split_events_stream);
+    }
     if (split_events_stream != NULL) {
         fclose(split_events_stream);
     }

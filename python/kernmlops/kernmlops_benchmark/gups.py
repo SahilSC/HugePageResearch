@@ -29,6 +29,9 @@ class GUPSBenchmarkConfig(ConfigBase):
             access summaries.
         split_schedule: Optional CSV path describing in-benchmark page splits.
         split_events_out: Optional CSV path for split syscall outcomes.
+        pre_split_pages: Optional CSV path listing table pages to split before
+            each timed update loop starts.
+        pre_split_events_out: Optional CSV path for pre-timed split outcomes.
     """
 
     table_size_gib: int = 16
@@ -39,6 +42,8 @@ class GUPSBenchmarkConfig(ConfigBase):
     page_summary_out: str = ""
     split_schedule: str = ""
     split_events_out: str = ""
+    pre_split_pages: str = ""
+    pre_split_events_out: str = ""
 
 
 class GUPSBenchmark(Benchmark):
@@ -138,6 +143,14 @@ class GUPSBenchmark(Benchmark):
             self.config.split_events_out,
             run_dir=run_dir,
         )
+        pre_split_pages = self._resolve_optional_run_path(
+            self.config.pre_split_pages,
+            run_dir=run_dir,
+        )
+        pre_split_events_out = self._resolve_optional_run_path(
+            self.config.pre_split_events_out,
+            run_dir=run_dir,
+        )
         env = os.environ.copy()
         if self.config.threads > 0:
             env["OMP_NUM_THREADS"] = str(self.config.threads)
@@ -163,6 +176,10 @@ class GUPSBenchmark(Benchmark):
             command.extend(["--split-schedule", str(split_schedule)])
         if split_events_out is not None:
             command.extend(["--split-events-out", str(split_events_out)])
+        if pre_split_pages is not None:
+            command.extend(["--pre-split-pages", str(pre_split_pages)])
+        if pre_split_events_out is not None:
+            command.extend(["--pre-split-events-out", str(pre_split_events_out)])
 
         self._log_file = stdout_path.open("w", encoding="utf-8")
         self.process = subprocess.Popen(

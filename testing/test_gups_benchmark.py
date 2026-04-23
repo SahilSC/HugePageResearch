@@ -34,6 +34,8 @@ class GUPSBenchmarkTest(unittest.TestCase):
                     page_summary_out="page_summary.csv",
                     split_schedule="schedule.csv",
                     split_events_out="split_events.csv",
+                    pre_split_pages="pre_split_pages.csv",
+                    pre_split_events_out="pre_split_events.csv",
                 ),
             )
 
@@ -50,6 +52,8 @@ class GUPSBenchmarkTest(unittest.TestCase):
             self.assertIn(str(run_dir / "page_summary.csv"), command)
             self.assertIn(str(run_dir / "schedule.csv"), command)
             self.assertIn(str(run_dir / "split_events.csv"), command)
+            self.assertIn(str(run_dir / "pre_split_pages.csv"), command)
+            self.assertIn(str(run_dir / "pre_split_events.csv"), command)
             self.assertEqual(
                 popen_mock.call_args.kwargs["env"]["OMP_NUM_THREADS"],
                 "1",
