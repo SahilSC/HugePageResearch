@@ -232,6 +232,16 @@ generator, but the split trigger is page-local rather than key-local.
 - the current generator uses `break_after_page_accesses=1` so the page has been
   faulted once before the in-benchmark `split_thp(pid, vaddr)` call
 
+`split_multi` rows:
+
+- runner sets THP `enabled` to `always`
+- when run with `--split-mode pre_split`, runner writes `pre_split_pages.csv`
+  before each invocation
+- the GUPS binary splits those table pages after initialization and before the
+  timed update loop starts
+- this keeps the timed region on the fast update loop rather than the
+  per-access inline split-schedule loop
+
 ### GUPS Calibration
 
 Install the benchmark on the host first:
@@ -284,6 +294,16 @@ PYTHONPATH=python/kernmlops .venv/bin/python \
   --random-seed 0
 ```
 
+For cumulative multi-page experiments, add:
+
+```bash
+  --multi-page-counts 2:10 \
+  --multi-page-groups hot,random
+```
+
+That emits `base_pages`, `no_break`, then cumulative `hot 2 pages` through
+`hot 10 pages` and `random 2 pages` through `random 10 pages`.
+
 ### Run The GUPS Matrix In `tmux`
 
 ```bash
@@ -299,9 +319,15 @@ tmux new-session -d -s gups-split-example \
   --updates-multiplier 4 \
   --stream-seed 7 \
   --runs 3 \
+  --split-mode inline \
   --collector-config config/replay_collectors_dtlb.yaml \
   -v |& tee temp_data_analysis/gups_split_harness_example/raw/gups_split_runtime.log'
 ```
+
+Use `--split-mode pre_split` for the multi-page steady-state experiment. In
+that mode, split rows write `pre_split_pages.csv` and `pre_split_events.csv`
+instead of inline split schedules, and the benchmark runtime excludes the page
+split calls.
 
 This writes:
 
@@ -309,7 +335,7 @@ This writes:
 - one metadata JSON beside that parquet
 - one `run_commands.log`
 - one per-row/per-run artifact tree containing `gups_results.jsonl`, stdout
-  logs, split schedules, and split-event CSVs
+  logs, split schedules or pre-split page lists, and split-event CSVs
 
 ### Render The GUPS Dashboard
 
@@ -326,9 +352,15 @@ PYTHONPATH=python/kernmlops .venv/bin/python \
 The renderer writes:
 
 - `runtime_mean_std.png`
+- `runtime_pct_vs_base_pages.png`
+- `speedup_pct_vs_base_pages.png`
 - `gups_mean_std.png`
 - `dtlb_loads_mean_std.png`
 - `dtlb_misses_mean_std.png`
+- `runtime_by_broken_page_count.png` when `split_multi` rows are present
+- `runtime_pct_vs_base_pages_by_broken_page_count.png` when `split_multi` rows are present
+- `speedup_pct_vs_base_pages_by_broken_page_count.png` when `split_multi` rows are present
+- `gups_by_broken_page_count.png` when `split_multi` rows are present
 - `config.md`
 - `gups_split_harness_<label>.html`
 

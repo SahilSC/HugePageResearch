@@ -174,6 +174,64 @@ class RenderGUPSSplitHarnessTest(unittest.TestCase):
         self.assertEqual(summaries[1].display_label, "(4) hot page #1")
         self.assertFalse(summaries[2].include_in_main_charts)
 
+    def test_load_row_summaries_labels_multi_page_expected_successes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results_path = Path(tmpdir) / "results.parquet"
+            pl.DataFrame(
+                [
+                    {
+                        "row_kind": "base_pages",
+                        "row_label": "base_pages",
+                        "target_page_count": 0,
+                        "page_group": "",
+                        "runtime_s_1": 1.0,
+                        "runtime_s_2": 1.2,
+                        "gups_1": 2.0,
+                        "gups_2": 1.8,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 0,
+                        "split_max_attempts_2": 0,
+                    },
+                    {
+                        "row_kind": "split_multi",
+                        "row_label": "hot 2 pages",
+                        "target_page_count": 2,
+                        "page_group": "hot",
+                        "runtime_s_1": 0.8,
+                        "runtime_s_2": 0.9,
+                        "gups_1": 2.5,
+                        "gups_2": 2.4,
+                        "split_successes_1": 2,
+                        "split_successes_2": 2,
+                        "split_max_attempts_1": 1,
+                        "split_max_attempts_2": 1,
+                    },
+                    {
+                        "row_kind": "split_multi",
+                        "row_label": "random 2 pages",
+                        "target_page_count": 2,
+                        "page_group": "random",
+                        "runtime_s_1": 0.95,
+                        "runtime_s_2": 0.96,
+                        "gups_1": 2.1,
+                        "gups_2": 2.0,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 2,
+                        "split_max_attempts_2": 2,
+                    },
+                ]
+            ).write_parquet(results_path)
+
+            summaries = RENDER.load_row_summaries(results_path)
+
+        self.assertEqual(summaries[1].display_label, "(4/4) hot 2 pages")
+        self.assertEqual(summaries[1].split_expected_successes, 4)
+        self.assertEqual(summaries[1].target_page_count, 2)
+        self.assertEqual(summaries[1].page_group, "hot")
+        self.assertFalse(summaries[2].include_in_main_charts)
+
     def test_render_dashboard_writes_html_pngs_and_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
@@ -268,6 +326,78 @@ class RenderGUPSSplitHarnessTest(unittest.TestCase):
             self.assertIn("The normalization baseline is always <code>base_pages</code>.", html_text)
             self.assertIn("Runtime % vs base_pages", html_text)
             self.assertIn("Speedup % vs base_pages", html_text)
+
+    def test_render_dashboard_writes_multi_page_count_curves(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            results_path = base / "results.parquet"
+            metadata_path = base / "results.metadata.json"
+            output_dir = base / "dashboard"
+
+            rows = [
+                {
+                    "row_kind": "base_pages",
+                    "row_label": "base_pages",
+                    "target_page_count": 0,
+                    "page_group": "",
+                    "runtime_s_1": 1.0,
+                    "runtime_s_2": 1.2,
+                    "gups_1": 2.0,
+                    "gups_2": 1.8,
+                    "split_successes_1": 0,
+                    "split_successes_2": 0,
+                    "split_max_attempts_1": 0,
+                    "split_max_attempts_2": 0,
+                }
+            ]
+            for page_group in ("hot", "random"):
+                for count in (2, 3):
+                    rows.append(
+                        {
+                            "row_kind": "split_multi",
+                            "row_label": f"{page_group} {count} pages",
+                            "target_page_count": count,
+                            "page_group": page_group,
+                            "runtime_s_1": 0.9 + (count * 0.01),
+                            "runtime_s_2": 1.0 + (count * 0.01),
+                            "gups_1": 2.3,
+                            "gups_2": 2.2,
+                            "split_successes_1": count,
+                            "split_successes_2": count,
+                            "split_max_attempts_1": 1,
+                            "split_max_attempts_2": 1,
+                        }
+                    )
+            pl.DataFrame(rows).write_parquet(results_path)
+
+            metadata_path.write_text(
+                json.dumps(
+                    {
+                        "output": str(results_path),
+                        "split_mode": "pre_split",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            outputs = RENDER.render_dashboard(
+                results_path=results_path,
+                metadata_path=metadata_path,
+                output_dir=output_dir,
+                label="multi",
+            )
+
+            count_curve_pngs = outputs["count_curve_pngs"]
+            self.assertEqual(len(count_curve_pngs), 4)
+            for png_path in count_curve_pngs:
+                self.assertTrue(png_path.is_file())
+            self.assertTrue((output_dir / "runtime_by_broken_page_count.png").is_file())
+            self.assertTrue(
+                (output_dir / "runtime_pct_vs_base_pages_by_broken_page_count.png").is_file()
+            )
+            html_text = outputs["html"].read_text(encoding="utf-8")
+            self.assertIn("Broken Page Count Curves", html_text)
+            self.assertIn("(4/4) hot 2 pages", html_text)
 
 
 if __name__ == "__main__":

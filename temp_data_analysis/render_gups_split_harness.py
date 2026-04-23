@@ -22,7 +22,11 @@ class RowSummary:
         row_label: Human-readable row label from the breakpoint matrix.
         display_label: Chart label with split-success counts when relevant.
         row_kind: Baseline or split-only row kind.
+        page_group: Multi-page group label such as ``hot`` or ``random``.
+        target_page_count: Number of pages selected by this row.
         split_success_total: Total successful splits across all runs.
+        split_expected_successes: Expected successes for pre-split multi-page
+            rows, computed as ``target_page_count * runs``.
         split_max_attempts_max: Maximum retry count seen across all runs.
         runtime_mean: Mean per-run runtime across matrix reruns.
         runtime_std: Sample standard deviation of per-run runtime.
@@ -39,7 +43,10 @@ class RowSummary:
     row_label: str
     display_label: str
     row_kind: str
+    page_group: str
+    target_page_count: int
     split_success_total: int
+    split_expected_successes: int
     split_max_attempts_max: int
     runtime_mean: float
     runtime_std: float
@@ -209,23 +216,38 @@ def load_row_summaries(results_path: Path) -> list[RowSummary]:
         dtlb_loads_values = _row_metric_values(row, dtlb_loads_columns)
         dtlb_misses_values = _row_metric_values(row, dtlb_misses_columns)
         split_success_total = sum(int(row[column]) for column in split_success_columns)
+        target_page_count = int(row.get("target_page_count") or 0)
+        page_group = str(row.get("page_group") or "")
+        split_expected_successes = (
+            target_page_count * len(split_success_columns)
+            if row_kind == "split_multi"
+            else 0
+        )
         split_max_attempts_max = max(
             [int(row[column]) for column in split_max_attempt_columns],
             default=0,
         )
-        include_in_main_charts = row_kind != "split_only" or split_success_total > 0
-        display_label = (
-            f"({split_success_total}) {row_label}"
-            if row_kind == "split_only"
-            else row_label
+        include_in_main_charts = (
+            row_kind not in {"split_only", "split_multi"} or split_success_total > 0
         )
+        if row_kind == "split_multi":
+            display_label = (
+                f"({split_success_total}/{split_expected_successes}) {row_label}"
+            )
+        elif row_kind == "split_only":
+            display_label = f"({split_success_total}) {row_label}"
+        else:
+            display_label = row_label
 
         summaries.append(
             RowSummary(
                 row_label=row_label,
                 display_label=display_label,
                 row_kind=row_kind,
+                page_group=page_group,
+                target_page_count=target_page_count,
                 split_success_total=split_success_total,
+                split_expected_successes=split_expected_successes,
                 split_max_attempts_max=split_max_attempts_max,
                 runtime_mean=statistics.mean(runtime_values),
                 runtime_std=_sample_std(runtime_values),
@@ -280,6 +302,61 @@ def _plot_bar_metric(
     plt.close(figure)
 
 
+def _multi_page_summaries(summaries: list[RowSummary]) -> list[RowSummary]:
+    return [
+        summary
+        for summary in summaries
+        if summary.row_kind == "split_multi"
+        and summary.target_page_count > 0
+        and summary.page_group
+        and summary.include_in_main_charts
+    ]
+
+
+def _plot_count_curve_metric(
+    *,
+    summaries: list[RowSummary],
+    title: str,
+    ylabel: str,
+    value_getter,
+    std_getter,
+    output_path: Path,
+) -> None:
+    included = _multi_page_summaries(summaries)
+    if not included:
+        raise RuntimeError("No successful split_multi rows are available for count curves.")
+
+    figure, axis = plt.subplots(figsize=(8.5, 5.5))
+    colors = {"hot": "#c44e52", "random": "#55a868"}
+    for page_group in sorted({summary.page_group for summary in included}):
+        group_rows = sorted(
+            [summary for summary in included if summary.page_group == page_group],
+            key=lambda summary: summary.target_page_count,
+        )
+        counts = [summary.target_page_count for summary in group_rows]
+        values = [value_getter(summary) for summary in group_rows]
+        errors = [std_getter(summary) for summary in group_rows]
+        axis.errorbar(
+            counts,
+            values,
+            yerr=errors,
+            marker="o",
+            capsize=4,
+            linewidth=2,
+            label=page_group,
+            color=colors.get(page_group),
+        )
+
+    axis.set_title(title)
+    axis.set_xlabel("Broken pages")
+    axis.set_ylabel(ylabel)
+    axis.grid(alpha=0.3)
+    axis.legend()
+    figure.tight_layout()
+    figure.savefig(output_path, dpi=200)
+    plt.close(figure)
+
+
 def _render_config_markdown(
     *,
     output_dir: Path,
@@ -314,6 +391,7 @@ def _render_config_markdown(
         f"- updates_multiplier: `{metadata.get('updates_multiplier', '')}`",
         f"- stream_seed: `{metadata.get('stream_seed', '')}`",
         f"- runs: `{metadata.get('runs', '')}`",
+        f"- split_mode: `{metadata.get('split_mode', '')}`",
         f"- collectors: `{metadata.get('collectors', [])}`",
         "",
         "## Included Rows",
@@ -322,6 +400,9 @@ def _render_config_markdown(
     for summary in included:
         lines.append(
             f"- `{summary.display_label}`: split_success_total={summary.split_success_total}, "
+            f"split_expected_successes={summary.split_expected_successes}, "
+            f"target_page_count={summary.target_page_count}, "
+            f"page_group={summary.page_group}, "
             f"split_max_attempts_max={summary.split_max_attempts_max}, "
             f"runtime_pct_vs_base_pages_mean={summary.runtime_pct_vs_base_pages_mean:.3f}, "
             f"speedup_pct_vs_base_pages_mean={summary.speedup_pct_vs_base_pages_mean:.3f}"
@@ -331,6 +412,9 @@ def _render_config_markdown(
         for summary in omitted:
             lines.append(
                 f"- `{summary.display_label}`: split_success_total={summary.split_success_total}, "
+                f"split_expected_successes={summary.split_expected_successes}, "
+                f"target_page_count={summary.target_page_count}, "
+                f"page_group={summary.page_group}, "
                 f"split_max_attempts_max={summary.split_max_attempts_max}, "
                 f"runtime_pct_vs_base_pages_mean={summary.runtime_pct_vs_base_pages_mean:.3f}, "
                 f"speedup_pct_vs_base_pages_mean={summary.speedup_pct_vs_base_pages_mean:.3f}"
@@ -353,6 +437,7 @@ def _render_html(
     gups_png: Path,
     dtlb_loads_png: Path | None,
     dtlb_misses_png: Path | None,
+    count_curve_pngs: list[Path],
 ) -> Path:
     omitted = [summary for summary in summaries if not summary.include_in_main_charts]
     rows_html = "\n".join(
@@ -367,6 +452,7 @@ def _render_html(
                 f"<td>{'' if summary.dtlb_loads_mean is None else f'{summary.dtlb_loads_mean:.3f} +/- {summary.dtlb_loads_std:.3f}'}</td>"
                 f"<td>{'' if summary.dtlb_misses_mean is None else f'{summary.dtlb_misses_mean:.3f} +/- {summary.dtlb_misses_std:.3f}'}</td>"
                 f"<td>{summary.split_success_total}</td>"
+                f"<td>{summary.split_expected_successes}</td>"
                 f"<td>{summary.split_max_attempts_max}</td>"
                 "</tr>"
             )
@@ -398,6 +484,10 @@ def _render_html(
         images_html.append(
             f'<img src="{dtlb_misses_png.name}" alt="dtlb misses graph" style="max-width: 100%;">'
         )
+    count_curves_html = [
+        f'<img src="{path.name}" alt="{path.stem}" style="max-width: 100%;">'
+        for path in count_curve_pngs
+    ]
 
     html_path = output_dir / f"gups_split_harness_{label}.html"
     html_path.write_text(
@@ -424,9 +514,11 @@ def _render_html(
                 "</ul>",
                 "<h2>Main Graphs</h2>",
                 *images_html,
+                "<h2>Broken Page Count Curves</h2>",
+                *(count_curves_html or ["<p>No successful multi-page split rows found.</p>"]),
                 "<h2>Row Summary</h2>",
                 "<table border='1' cellspacing='0' cellpadding='4'>",
-                "<tr><th>Row</th><th>Runtime</th><th>Runtime % vs base_pages</th><th>Speedup % vs base_pages</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Max split attempts</th></tr>",
+                "<tr><th>Row</th><th>Runtime</th><th>Runtime % vs base_pages</th><th>Speedup % vs base_pages</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Expected successes</th><th>Max split attempts</th></tr>",
                 rows_html,
                 "</table>",
                 "<h2>Omitted Split-Only Rows</h2>",
@@ -520,6 +612,56 @@ def render_dashboard(
             output_path=dtlb_misses_png,
         )
 
+    count_curve_pngs: list[Path] = []
+    if _multi_page_summaries(summaries):
+        runtime_by_count_png = output_dir / "runtime_by_broken_page_count.png"
+        _plot_count_curve_metric(
+            summaries=summaries,
+            title="Runtime By Broken Page Count",
+            ylabel="Runtime (s)",
+            value_getter=lambda summary: summary.runtime_mean,
+            std_getter=lambda summary: summary.runtime_std,
+            output_path=runtime_by_count_png,
+        )
+        count_curve_pngs.append(runtime_by_count_png)
+
+        runtime_pct_by_count_png = (
+            output_dir / "runtime_pct_vs_base_pages_by_broken_page_count.png"
+        )
+        _plot_count_curve_metric(
+            summaries=summaries,
+            title="Runtime Percent Change Vs base_pages By Broken Page Count",
+            ylabel="Runtime % vs base_pages",
+            value_getter=lambda summary: summary.runtime_pct_vs_base_pages_mean,
+            std_getter=lambda summary: summary.runtime_pct_vs_base_pages_std,
+            output_path=runtime_pct_by_count_png,
+        )
+        count_curve_pngs.append(runtime_pct_by_count_png)
+
+        speedup_pct_by_count_png = (
+            output_dir / "speedup_pct_vs_base_pages_by_broken_page_count.png"
+        )
+        _plot_count_curve_metric(
+            summaries=summaries,
+            title="Speedup Percent Vs base_pages By Broken Page Count",
+            ylabel="Speedup % vs base_pages",
+            value_getter=lambda summary: summary.speedup_pct_vs_base_pages_mean,
+            std_getter=lambda summary: summary.speedup_pct_vs_base_pages_std,
+            output_path=speedup_pct_by_count_png,
+        )
+        count_curve_pngs.append(speedup_pct_by_count_png)
+
+        gups_by_count_png = output_dir / "gups_by_broken_page_count.png"
+        _plot_count_curve_metric(
+            summaries=summaries,
+            title="GUPS By Broken Page Count",
+            ylabel="GUP/s",
+            value_getter=lambda summary: summary.gups_mean,
+            std_getter=lambda summary: summary.gups_std,
+            output_path=gups_by_count_png,
+        )
+        count_curve_pngs.append(gups_by_count_png)
+
     config_md = _render_config_markdown(
         output_dir=output_dir,
         results_path=results_path,
@@ -538,6 +680,7 @@ def render_dashboard(
         gups_png=gups_png,
         dtlb_loads_png=dtlb_loads_png,
         dtlb_misses_png=dtlb_misses_png,
+        count_curve_pngs=count_curve_pngs,
     )
     return {
         "runtime_png": runtime_png,
@@ -546,6 +689,7 @@ def render_dashboard(
         "gups_png": gups_png,
         "dtlb_loads_png": dtlb_loads_png if dtlb_loads_png is not None else Path(),
         "dtlb_misses_png": dtlb_misses_png if dtlb_misses_png is not None else Path(),
+        "count_curve_pngs": count_curve_pngs,
         "config_md": config_md,
         "html": html_path,
     }
