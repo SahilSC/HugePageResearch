@@ -97,6 +97,11 @@ class ReplayGUPSTest(unittest.TestCase):
                         if kwargs["split_schedule_path"] is not None
                         else None
                     ),
+                    (
+                        kwargs["run_dir"] / "pre_split_events.csv"
+                        if kwargs["pre_split_pages_path"] is not None
+                        else None
+                    ),
                 )
 
             with (
@@ -128,6 +133,7 @@ class ReplayGUPSTest(unittest.TestCase):
             self.assertIsNone(calls[0]["split_schedule_path"])
             self.assertIsNone(calls[1]["split_schedule_path"])
             self.assertIsNotNone(calls[2]["split_schedule_path"])
+            self.assertIsNone(calls[2]["pre_split_pages_path"])
             schedule_text = Path(calls[2]["split_schedule_path"]).read_text(encoding="utf-8")
             self.assertIn("0,7,1,hot page #1", schedule_text)
             self.assertTrue(output_path.is_file())
@@ -138,6 +144,116 @@ class ReplayGUPSTest(unittest.TestCase):
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             self.assertEqual(metadata["table_size_mib"], 64)
             teardown_mock.assert_called_once_with(mock.sentinel.system)
+
+    def test_run_benchmark_pre_split_writes_page_list(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            output_path = base / "results.parquet"
+            artifacts_dir = base / "artifacts"
+            breakpoints_df = pl.DataFrame(
+                [
+                    {
+                        "row_kind": "base_pages",
+                        "row_label": "base_pages",
+                        "target_page_index": -1,
+                        "target_column": "",
+                        "target_update_count": 0,
+                        "target_break_after_page_accesses": -1,
+                        "target_page_indices": "",
+                        "target_page_count": 0,
+                        "page_group": "",
+                    },
+                    {
+                        "row_kind": "no_break",
+                        "row_label": "no_break",
+                        "target_page_index": -1,
+                        "target_column": "",
+                        "target_update_count": 0,
+                        "target_break_after_page_accesses": -1,
+                        "target_page_indices": "",
+                        "target_page_count": 0,
+                        "page_group": "",
+                    },
+                    {
+                        "row_kind": "split_multi",
+                        "row_label": "hot 2 pages",
+                        "target_page_index": -1,
+                        "target_column": "hp_000007,hp_000009",
+                        "target_update_count": 180,
+                        "target_break_after_page_accesses": 1,
+                        "target_page_indices": "7,9",
+                        "target_page_count": 2,
+                        "page_group": "hot",
+                    },
+                ]
+            )
+
+            calls: list[dict[str, object]] = []
+
+            def fake_run_once(**kwargs):
+                calls.append(kwargs)
+                pre_split = kwargs["pre_split_pages_path"] is not None
+                return (
+                    {
+                        "repeat_count": 4,
+                        "runtime_s_mean": 1.25,
+                        "runtime_s_total": 5.0,
+                        "gups_mean": 2.5,
+                        "gups_min": 2.4,
+                        "gups_max": 2.6,
+                        "split_events": 2 if pre_split else 0,
+                        "split_successes": 2 if pre_split else 0,
+                        "split_failures": 0,
+                        "split_syscall_attempts": 2 if pre_split else 0,
+                        "split_max_attempts": 1 if pre_split else 0,
+                        "split_total_wall_ms": 4.0 if pre_split else 0.0,
+                        "split_max_wall_ms": 2.0 if pre_split else 0.0,
+                    },
+                    {},
+                    "gups --results ...",
+                    kwargs["run_dir"] / "gups_results.jsonl",
+                    None,
+                    kwargs["run_dir"] / "pre_split_events.csv" if pre_split else None,
+                )
+
+            with (
+                mock.patch.object(replay_gups, "_resolve_gups_binary", return_value=base / "gups"),
+                mock.patch.object(replay_gups, "setup_system", return_value=mock.sentinel.system),
+                mock.patch.object(replay_gups, "teardown_system"),
+                mock.patch.object(replay_gups, "_set_thp_enabled_mode"),
+                mock.patch.object(replay_gups, "_run_gups_once", side_effect=fake_run_once),
+                mock.patch.object(replay_gups, "HardwareCollector") as hw_collector_cls,
+            ):
+                hw_collector_cls.return_value = mock.Mock()
+                replay_gups.run_benchmark(
+                    breakpoints_df=breakpoints_df,
+                    output=output_path,
+                    artifacts_dir=artifacts_dir,
+                    benchmark_dir=base,
+                    table_size_gib=None,
+                    table_size_mib=64,
+                    repeats=4,
+                    updates_multiplier=4,
+                    stream_seed=7,
+                    runs=1,
+                    collectors=(),
+                    split_mode="pre_split",
+                )
+
+            self.assertIsNone(calls[0]["pre_split_pages_path"])
+            self.assertIsNone(calls[1]["pre_split_pages_path"])
+            self.assertIsNone(calls[2]["split_schedule_path"])
+            self.assertIsNotNone(calls[2]["pre_split_pages_path"])
+            pre_split_text = Path(calls[2]["pre_split_pages_path"]).read_text(
+                encoding="utf-8"
+            )
+            self.assertIn("page_index,label", pre_split_text)
+            self.assertIn("7,hot 2 pages", pre_split_text)
+            self.assertIn("9,hot 2 pages", pre_split_text)
+            results_df = pl.read_parquet(output_path)
+            self.assertEqual(results_df[2, "split_successes_1"], 2)
+            self.assertTrue(results_df[2, "pre_split_pages_path_1"])
+            self.assertTrue(results_df[2, "pre_split_events_path_1"])
 
 
 if __name__ == "__main__":

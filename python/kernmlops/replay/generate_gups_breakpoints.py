@@ -6,8 +6,8 @@ is stable across repeats, then emits a Redis-style breakpoint matrix:
 
 1. ``base_pages`` sentinel row
 2. ``no_break`` intact-THP baseline
-3. split-only hottest-page rows
-4. split-only random-page rows
+3. split-only hottest-page rows, or cumulative hottest-page sets
+4. split-only random-page rows, or cumulative random-page sets
 """
 
 from __future__ import annotations
@@ -122,6 +122,8 @@ def generate_breakpoint_rows(
     hot_pages: int = 10,
     random_rows: int = 3,
     random_seed: int = 0,
+    multi_page_counts: tuple[int, int] | None = None,
+    multi_page_groups: tuple[str, ...] = (),
 ) -> list[dict[str, int | str]]:
     """Build a Redis-style breakpoint matrix for deterministic GUPS.
 
@@ -131,10 +133,25 @@ def generate_breakpoint_rows(
         random_rows: Number of random split-only rows to emit from the
             remaining pages.
         random_seed: Stable RNG seed for random-page row selection.
+        multi_page_counts: Optional inclusive ``(start, end)`` count range for
+            cumulative multi-page rows. When set, single-page rows are replaced
+            by cumulative rows for the requested groups.
+        multi_page_groups: Page groups to emit for ``multi_page_counts``.
 
     Returns:
         Ordered row dictionaries ready to write to Parquet.
     """
+    if multi_page_counts is not None:
+        start_count, end_count = multi_page_counts
+        if start_count <= 0 or end_count < start_count:
+            raise RuntimeError("--multi-page-counts must look like START:END with 0 < START <= END.")
+        unknown_groups = set(multi_page_groups) - {"hot", "random"}
+        if unknown_groups:
+            unknown_text = ", ".join(sorted(unknown_groups))
+            raise RuntimeError(f"Unknown --multi-page-groups values: {unknown_text}")
+        if not multi_page_groups:
+            raise RuntimeError("--multi-page-counts requires at least one --multi-page-groups value.")
+
     if not page_summaries:
         return [
             {
@@ -144,13 +161,27 @@ def generate_breakpoint_rows(
                 "target_column": "",
                 "target_update_count": 0,
                 "target_break_after_page_accesses": -1,
+                "target_page_indices": "",
+                "target_page_count": 0,
+                "page_group": "",
             }
         ]
 
-    hottest = page_summaries[:hot_pages]
-    remaining = page_summaries[hot_pages:]
+    max_multi_count = multi_page_counts[1] if multi_page_counts is not None else 0
+    hottest_count = max(hot_pages, max_multi_count if "hot" in multi_page_groups else 0)
+    hottest = page_summaries[:hottest_count]
+    remaining = page_summaries[hottest_count:]
     rng = random.Random(random_seed)
-    random_pages = rng.sample(remaining, k=min(random_rows, len(remaining)))
+    if multi_page_counts is not None and "random" in multi_page_groups:
+        random_count = max_multi_count
+    else:
+        random_count = min(random_rows, len(remaining))
+    if multi_page_counts is not None and "random" in multi_page_groups and random_count > len(remaining):
+        raise RuntimeError(
+            f"Need {random_count} random GUPS pages after the hottest {hottest_count}, "
+            f"but only {len(remaining)} are available."
+        )
+    random_pages = rng.sample(remaining, k=random_count)
     selected_pages = hottest + random_pages
     page_columns = [breakpoint_column_name(page.page_index) for page in selected_pages]
     max_values = {
@@ -173,6 +204,9 @@ def generate_breakpoint_rows(
             "target_column": "",
             "target_update_count": 0,
             "target_break_after_page_accesses": -1,
+            "target_page_indices": "",
+            "target_page_count": 0,
+            "page_group": "",
             **_base_row(),
         }
     )
@@ -184,9 +218,59 @@ def generate_breakpoint_rows(
             "target_column": "",
             "target_update_count": 0,
             "target_break_after_page_accesses": -1,
+            "target_page_indices": "",
+            "target_page_count": 0,
+            "page_group": "",
             **_max_row(),
         }
     )
+
+    if multi_page_counts is not None:
+        start_count, end_count = multi_page_counts
+
+        def _multi_row(
+            *,
+            group: str,
+            count: int,
+            pages: list[PageSummary],
+        ) -> dict[str, int | str]:
+            selected = pages[:count]
+            row = _max_row()
+            target_columns = [breakpoint_column_name(page.page_index) for page in selected]
+            target_indices = [page.page_index for page in selected]
+            for column in target_columns:
+                row[column] = 0
+            return {
+                "row_kind": "split_multi",
+                "row_label": f"{group} {count} pages",
+                "target_page_index": -1,
+                "target_column": ",".join(target_columns),
+                "target_update_count": sum(page.update_count for page in selected),
+                "target_break_after_page_accesses": 1,
+                "target_page_indices": ",".join(str(index) for index in target_indices),
+                "target_page_count": count,
+                "page_group": group,
+                **row,
+            }
+
+        if "hot" in multi_page_groups and len(hottest) < end_count:
+            raise RuntimeError(
+                f"Need {end_count} hot GUPS pages, but only {len(hottest)} are available."
+            )
+        if "random" in multi_page_groups and len(random_pages) < end_count:
+            raise RuntimeError(
+                f"Need {end_count} random GUPS pages, but only {len(random_pages)} are available."
+            )
+
+        for group in multi_page_groups:
+            source_pages = hottest if group == "hot" else random_pages
+            for count in range(start_count, end_count + 1):
+                rows.append(_multi_row(group=group, count=count, pages=source_pages))
+
+        return rows
+
+    hottest = hottest[:hot_pages]
+    random_pages = random_pages[:random_rows]
 
     for rank, page in enumerate(hottest, start=1):
         target_column = breakpoint_column_name(page.page_index)
@@ -200,6 +284,9 @@ def generate_breakpoint_rows(
                 "target_column": target_column,
                 "target_update_count": page.update_count,
                 "target_break_after_page_accesses": 1,
+                "target_page_indices": str(page.page_index),
+                "target_page_count": 1,
+                "page_group": "hot",
                 **row,
             }
         )
@@ -216,6 +303,9 @@ def generate_breakpoint_rows(
                 "target_column": target_column,
                 "target_update_count": page.update_count,
                 "target_break_after_page_accesses": 1,
+                "target_page_indices": str(page.page_index),
+                "target_page_count": 1,
+                "page_group": "random",
                 **row,
             }
         )
@@ -227,6 +317,39 @@ def write_breakpoints(rows: list[dict[str, int | str]], output_path: Path) -> No
     """Write the generated matrix to one Parquet file."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     pl.DataFrame(rows).write_parquet(output_path)
+
+
+def parse_multi_page_counts(raw_counts: str) -> tuple[int, int]:
+    """Parse an inclusive multi-page count range like ``2:10``."""
+    pieces = raw_counts.split(":")
+    if len(pieces) != 2:
+        raise argparse.ArgumentTypeError("--multi-page-counts must look like START:END.")
+    try:
+        start_count = int(pieces[0])
+        end_count = int(pieces[1])
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "--multi-page-counts must contain integer START and END values."
+        ) from exc
+    if start_count <= 0 or end_count < start_count:
+        raise argparse.ArgumentTypeError(
+            "--multi-page-counts must satisfy 0 < START <= END."
+        )
+    return start_count, end_count
+
+
+def parse_multi_page_groups(raw_groups: str) -> tuple[str, ...]:
+    """Parse a comma-separated multi-page group list."""
+    groups = tuple(group.strip() for group in raw_groups.split(",") if group.strip())
+    unknown_groups = set(groups) - {"hot", "random"}
+    if unknown_groups:
+        unknown_text = ", ".join(sorted(unknown_groups))
+        raise argparse.ArgumentTypeError(
+            f"--multi-page-groups only accepts hot and random, got: {unknown_text}"
+        )
+    if not groups:
+        raise argparse.ArgumentTypeError("--multi-page-groups cannot be empty.")
+    return groups
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -261,6 +384,18 @@ def _build_parser() -> argparse.ArgumentParser:
         default=0,
         help="Stable RNG seed for random-row selection (default: 0).",
     )
+    parser.add_argument(
+        "--multi-page-counts",
+        type=parse_multi_page_counts,
+        default=None,
+        help="Optional inclusive count range for cumulative rows, e.g. 2:10.",
+    )
+    parser.add_argument(
+        "--multi-page-groups",
+        type=parse_multi_page_groups,
+        default=("hot", "random"),
+        help="Comma-separated cumulative groups when --multi-page-counts is set (default: hot,random).",
+    )
     return parser
 
 
@@ -274,6 +409,8 @@ def main() -> None:
         hot_pages=args.hot_pages,
         random_rows=args.random_rows,
         random_seed=args.random_seed,
+        multi_page_counts=args.multi_page_counts,
+        multi_page_groups=args.multi_page_groups,
     )
     write_breakpoints(rows, args.output)
 

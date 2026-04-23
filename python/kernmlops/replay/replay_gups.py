@@ -66,6 +66,16 @@ def _page_columns(row: dict[str, object]) -> list[str]:
     return sorted(column for column in row if column.startswith("hp_"))
 
 
+def _target_page_indices(row: dict[str, object]) -> list[int]:
+    """Return all table-local hugepage indices targeted by one matrix row."""
+    raw_indices = row.get("target_page_indices", "")
+    if raw_indices is not None and str(raw_indices).strip():
+        return [int(piece) for piece in str(raw_indices).split(",") if piece.strip()]
+
+    target_page_index = int(row.get("target_page_index", -1))
+    return [target_page_index] if target_page_index >= 0 else []
+
+
 def _write_split_schedule(
     row: dict[str, object],
     *,
@@ -97,6 +107,34 @@ def _write_split_schedule(
         encoding="utf-8",
     )
     return schedule_path
+
+
+def _write_pre_split_pages(
+    row: dict[str, object],
+    *,
+    pre_split_pages_path: Path,
+) -> Path | None:
+    """Write one pre-timed page list for a split row."""
+    row_kind = str(row.get("row_kind", ""))
+    if row_kind not in {"split_only", "split_multi"}:
+        return None
+
+    target_page_indices = _target_page_indices(row)
+    if not target_page_indices:
+        return None
+
+    label = str(row.get("row_label", "split row"))
+    pre_split_pages_path.parent.mkdir(parents=True, exist_ok=True)
+    pre_split_pages_path.write_text(
+        "".join(
+            [
+                "page_index,label\n",
+                *[f"{page_index},{label}\n" for page_index in target_page_indices],
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return pre_split_pages_path
 
 
 def _load_gups_results(results_path: Path, expected_repeats: int) -> list[dict[str, object]]:
@@ -152,14 +190,18 @@ def _run_gups_once(
     updates_multiplier: int,
     stream_seed: int,
     split_schedule_path: Path | None,
+    pre_split_pages_path: Path | None,
     collectors: tuple[str, ...],
     hw_collector: HardwareCollector,
-) -> tuple[dict[str, int | float], dict[str, int], str, Path, Path | None]:
+) -> tuple[dict[str, int | float], dict[str, int], str, Path, Path | None, Path | None]:
     """Run one seeded GUPS invocation and return aggregated metrics."""
     results_path = run_dir / "gups_results.jsonl"
     stdout_path = run_dir / "gups_stdout.log"
     split_events_path = (
         run_dir / "split_events.csv" if split_schedule_path is not None else None
+    )
+    pre_split_events_path = (
+        run_dir / "pre_split_events.csv" if pre_split_pages_path is not None else None
     )
     command = [
         str(binary_path),
@@ -179,6 +221,10 @@ def _run_gups_once(
         command.extend(["--split-schedule", str(split_schedule_path)])
     if split_events_path is not None:
         command.extend(["--split-events-out", str(split_events_path)])
+    if pre_split_pages_path is not None:
+        command.extend(["--pre-split-pages", str(pre_split_pages_path)])
+    if pre_split_events_path is not None:
+        command.extend(["--pre-split-events-out", str(pre_split_events_path)])
 
     run_dir.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
@@ -215,6 +261,7 @@ def _run_gups_once(
         shlex.join(command),
         results_path,
         split_events_path,
+        pre_split_events_path,
     )
 
 
@@ -231,8 +278,12 @@ def run_benchmark(
     stream_seed: int,
     runs: int,
     collectors: tuple[str, ...],
+    split_mode: str = "inline",
 ) -> Path:
     """Run the deterministic GUPS breakpoint matrix and write one result parquet."""
+    if split_mode not in {"inline", "pre_split"}:
+        raise RuntimeError("--split-mode must be inline or pre_split.")
+
     binary_path = _resolve_gups_binary(benchmark_dir)
     size_args = _build_size_args(
         table_size_gib=table_size_gib,
@@ -261,20 +312,37 @@ def run_benchmark(
 
             for run_number in range(1, runs + 1):
                 run_dir = artifacts_dir / f"row_{row_index:03d}" / f"run_{run_number:02d}"
-                schedule_path = _write_split_schedule(
-                    row,
-                    repeats=repeats,
-                    schedule_path=run_dir / "split_schedule.csv",
-                )
+                schedule_path = None
+                pre_split_pages_path = None
+                if thp_mode == "always":
+                    if split_mode == "inline":
+                        schedule_path = _write_split_schedule(
+                            row,
+                            repeats=repeats,
+                            schedule_path=run_dir / "split_schedule.csv",
+                        )
+                    else:
+                        pre_split_pages_path = _write_pre_split_pages(
+                            row,
+                            pre_split_pages_path=run_dir / "pre_split_pages.csv",
+                        )
                 _set_thp_enabled_mode(thp_mode)
-                summary, counter_totals, command_text, results_path, split_events_path = _run_gups_once(
+                (
+                    summary,
+                    counter_totals,
+                    command_text,
+                    results_path,
+                    split_events_path,
+                    pre_split_events_path,
+                ) = _run_gups_once(
                     binary_path=binary_path,
                     size_args=size_args,
                     run_dir=run_dir,
                     repeats=repeats,
                     updates_multiplier=updates_multiplier,
                     stream_seed=stream_seed,
-                    split_schedule_path=schedule_path if thp_mode == "always" else None,
+                    split_schedule_path=schedule_path,
+                    pre_split_pages_path=pre_split_pages_path,
                     collectors=collectors,
                     hw_collector=hw_collector,
                 )
@@ -310,10 +378,16 @@ def run_benchmark(
                 row_result[f"stdout_path_{run_number}"] = str(run_dir / "gups_stdout.log")
                 row_result[f"gups_results_path_{run_number}"] = str(results_path)
                 row_result[f"split_schedule_path_{run_number}"] = (
-                    str(schedule_path) if schedule_path is not None and thp_mode == "always" else ""
+                    str(schedule_path) if schedule_path is not None else ""
                 )
                 row_result[f"split_events_path_{run_number}"] = (
                     str(split_events_path) if split_events_path is not None else ""
+                )
+                row_result[f"pre_split_pages_path_{run_number}"] = (
+                    str(pre_split_pages_path) if pre_split_pages_path is not None else ""
+                )
+                row_result[f"pre_split_events_path_{run_number}"] = (
+                    str(pre_split_events_path) if pre_split_events_path is not None else ""
                 )
                 row_result[f"command_{run_number}"] = command_text
                 for counter_name, total in counter_totals.items():
@@ -338,6 +412,7 @@ def run_benchmark(
         "updates_multiplier": updates_multiplier,
         "stream_seed": stream_seed,
         "runs": runs,
+        "split_mode": split_mode,
         "collectors": list(collectors),
         "commands_log_path": str(commands_log_path),
     }
@@ -383,6 +458,12 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--updates-multiplier", type=int, default=4)
     parser.add_argument("--stream-seed", type=int, default=1)
     parser.add_argument("--runs", type=int, default=3)
+    parser.add_argument(
+        "--split-mode",
+        choices=("inline", "pre_split"),
+        default="inline",
+        help="Use inline per-access split schedules or pre-timed page splitting.",
+    )
     parser.add_argument(
         "--collector-config",
         type=Path,
@@ -433,6 +514,7 @@ def main() -> None:
         stream_seed=args.stream_seed,
         runs=args.runs,
         collectors=collector_names,
+        split_mode=args.split_mode,
     )
 
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))

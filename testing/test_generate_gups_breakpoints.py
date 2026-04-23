@@ -55,10 +55,45 @@ class GenerateGUPSBreakpointsTest(unittest.TestCase):
         self.assertEqual(rows[2]["target_break_after_page_accesses"], 1)
         self.assertEqual(rows[3]["target_column"], "hp_000007")
         self.assertIn(rows[4]["target_column"], {"hp_000005", "hp_000003"})
+        self.assertEqual(rows[2]["target_page_indices"], "9")
+        self.assertEqual(rows[2]["target_page_count"], 1)
+        self.assertEqual(rows[2]["page_group"], "hot")
         self.assertEqual(rows[0]["hp_000009"], 0)
         self.assertEqual(rows[1]["hp_000009"], 91)
         self.assertEqual(rows[2]["hp_000009"], 0)
         self.assertEqual(rows[2]["hp_000007"], 71)
+
+    def test_generate_breakpoint_rows_emits_cumulative_multi_page_rows(self):
+        summaries = [
+            generate_gups_breakpoints.PageSummary(page_index, 100 - page_index, 0, 99)
+            for page_index in range(20)
+        ]
+
+        rows = generate_gups_breakpoints.generate_breakpoint_rows(
+            summaries,
+            hot_pages=10,
+            random_rows=3,
+            random_seed=0,
+            multi_page_counts=(2, 10),
+            multi_page_groups=("hot", "random"),
+        )
+
+        self.assertEqual(len(rows), 20)
+        self.assertEqual(rows[0]["row_kind"], "base_pages")
+        self.assertEqual(rows[1]["row_kind"], "no_break")
+        hot_rows = [row for row in rows if row["page_group"] == "hot"]
+        random_rows = [row for row in rows if row["page_group"] == "random"]
+        self.assertEqual([row["target_page_count"] for row in hot_rows], list(range(2, 11)))
+        self.assertEqual([row["target_page_count"] for row in random_rows], list(range(2, 11)))
+        self.assertEqual(hot_rows[0]["target_page_indices"], "0,1")
+        self.assertEqual(hot_rows[-1]["target_page_indices"], "0,1,2,3,4,5,6,7,8,9")
+        self.assertEqual(random_rows[0]["target_page_count"], 2)
+        self.assertEqual(
+            random_rows[0]["target_page_indices"],
+            random_rows[1]["target_page_indices"].rsplit(",", maxsplit=1)[0],
+        )
+        self.assertEqual(hot_rows[-1]["row_kind"], "split_multi")
+        self.assertEqual(hot_rows[-1]["row_label"], "hot 10 pages")
 
 
 if __name__ == "__main__":
