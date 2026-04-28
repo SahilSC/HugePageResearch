@@ -21,6 +21,9 @@ RUN apt-get update -y \
     kmod \
     && apt-get clean
 
+# For easy port checking
+RUN apt-get install -y lsof
+
 # Install OSQuery
 RUN mkdir -p /etc/apt/keyrings
 RUN curl -fsSL  https://pkg.osquery.io/deb/pubkey.gpg | gpg --dearmor -o /etc/apt/keyrings/osquery.gpg
