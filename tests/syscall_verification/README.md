@@ -98,13 +98,16 @@ Start Redis with the repo config and the `VAPTR` module:
 
 ```bash
 cd ~/HugePageResearch
-REDIS_BIN="$(command -v redis-server)"
-"$REDIS_BIN" ./config/redis.conf --loadmodule ./redis-module/vaptr.so
+REDIS_BIN="/tmp/redis-7.4.2/src/redis-server"
+"$REDIS_BIN" ~/HugePageResearch/config/redis.conf \
+  --loadmodule ~/HugePageResearch/redis-module/vaptr.so
 ```
 
-For replay and manual VAPTR smoke runs, do not start Redis as bare
-`redis-server ...`. `replay_trace.py` expects `INFO server.executable` to
-already be a real executable path.
+For replay and manual VAPTR smoke runs, do not assume the distro Redis works.
+On this machine, `/usr/bin/redis-server` is `7.0.15` and failed to load
+`redis-module/vaptr.so`. `replay_trace.py` expects `INFO server.executable` to
+already be the exact Redis binary that can load the module, which is why this
+guide uses `/tmp/redis-7.4.2/src/redis-server`.
 
 Insert one hash with a 2 MiB field value:
 
