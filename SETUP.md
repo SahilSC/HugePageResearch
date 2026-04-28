@@ -202,9 +202,11 @@ Use this section when you want one preserved `snapshot.rdb`, one preserved
 
 The canonical replay entrypoints are:
 
-- `scripts/capture_redis_trace.sh`
-- `python/kernmlops/analysis/generate_breakpoints.py`
-- `python/kernmlops/data_collection/replay_trace.py`
+- `python/kernmlops/replay/capture_redis_trace.sh`
+- `python/kernmlops/replay/generate_breakpoints.py`
+- `python/kernmlops/replay/replay_trace.py`
+
+`replay.md` is the runbook for the current CLI flags and replay semantics.
 
 ### 3.1 Host Prep
 
@@ -238,7 +240,7 @@ Inside the container:
 cd /KernMLOps
 redis-server ./config/redis.conf --loadmodule ./redis-module/vaptr.so --daemonize yes
 redis-cli ping
-./scripts/capture_redis_trace.sh
+./python/kernmlops/replay/capture_redis_trace.sh
 ```
 
 Expected artifacts:
@@ -250,7 +252,7 @@ Expected artifacts:
 
 ```bash
 cd /KernMLOps
-.venv/bin/python python/kernmlops/analysis/generate_breakpoints.py \
+.venv/bin/python python/kernmlops/replay/generate_breakpoints.py \
   data/redis_traces/monitor_run.log \
   --output data/breakpoints.parquet
 ```
@@ -259,7 +261,7 @@ cd /KernMLOps
 
 ```bash
 cd /KernMLOps
-.venv/bin/python python/kernmlops/data_collection/replay_trace.py \
+.venv/bin/python python/kernmlops/replay/replay_trace.py \
   data/redis_traces/snapshot.rdb \
   data/redis_traces/monitor_run.log \
   --breakpoints data/breakpoints.parquet \

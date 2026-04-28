@@ -13,7 +13,10 @@ itself a valid split target.
 
 Usage::
 
-    python generate_breakpoints.py <monitor_log> [--output data/breakpoints.parquet] [--max-combos 10]
+    python python/kernmlops/replay/generate_breakpoints.py <monitor_log> \
+        [--output data/breakpoints.parquet] \
+        [--hot-keys 10] \
+        [--random-rows 3]
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from collections import Counter
 from pathlib import Path
 
 import polars as pl
+
 
 # Matches a timestamped redis-cli monitor line:
 #   <timestamp> [<db> <client>] "CMD" "arg1" ...
@@ -100,7 +104,7 @@ def parse_log(log_path: Path) -> dict[str, int]:
 
 
 def make_breakpoints(access_counts: dict[str, int]) -> dict[str, int]:
-    """Create an initial breakpoint mapping with all keys set to zero.
+    """Create the ``base_pages`` sentinel mapping with all keys set to zero.
 
     Args:
         access_counts: Per-key access counts as returned by
@@ -108,6 +112,11 @@ def make_breakpoints(access_counts: dict[str, int]) -> dict[str, int]:
 
     Returns:
         A new dict ``{key: 0}`` for every key in *access_counts*.
+
+    Note:
+        The all-zero row is interpreted by replay as the ``base_pages``
+        sentinel. Replay disables THP before restoring Redis for that row
+        instead of issuing replay-time split syscalls.
     """
     return {key: 0 for key in access_counts}
 
@@ -149,27 +158,51 @@ def set_breakpoint(
     return updated
 
 
+def _hottest_keys(
+    access_counts: dict[str, int],
+) -> list[str]:
+    """Return keys ordered by access count (hottest first).
+
+    Args:
+        access_counts: Per-key access counts from :func:`parse_log`.
+
+    Returns:
+        Keys sorted by descending access count, ties broken alphabetically.
+    """
+    return [
+        key
+        for key, _count in sorted(
+            access_counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+    ]
+
+
 def generate_combinations(
     access_counts: dict[str, int],
-    max_combos: int = 10,
+    hot_keys: int = 10,
+    random_rows: int = 3,
 ) -> list[dict[str, int]]:
-    """Generate a representative sample of breakpoint combinations.
+    """Generate replay breakpoint combinations for the current hot-key study.
 
-    Strategy:
+    Produces:
 
-    1. All-zeros baseline (every key at breakpoint 0).
+    1. All-zeros ``base_pages`` sentinel row.
     2. All-max combination (every key at ``access_counts[key] + 1`` —
        page never broken for any key).
-    3. Single-key-at-max variants (each key individually set to its
-       maximum; all others at 0).
-    4. Random combinations to fill remaining slots, where each key is
-       independently sampled from ``[0, access_counts[key] + 1]``.
+    3. Up to *hot_keys* split-only rows (hottest first): split only that
+       key before its first access, leave all others unsplit.
+    4. *random_rows* random split-only rows chosen from the remaining keys
+       that were not already used for the hottest rows.
 
-    Duplicate combinations are deduplicated.
+    The key ordering is currently hardcoded to hottest-first. A future
+    version may accept a policy parameter to change the ordering (e.g.
+    coldest-first).
 
     Args:
         access_counts: Per-key access counts.
-        max_combos: Upper bound on the number of combinations to return.
+        hot_keys: Number of split-only hot-key rows to generate.
+        random_rows: Number of random combination rows to generate.
 
     Returns:
         A list of breakpoint dicts, each mapping every key to a valid
@@ -178,36 +211,46 @@ def generate_combinations(
     if not access_counts:
         return [{}]
 
-    keys = sorted(access_counts.keys())
+    # Hardcoded policy: hottest keys first.
+    keys = _hottest_keys(access_counts)
+    key_to_index = {key: i for i, key in enumerate(keys)}
     seen: set[tuple[int, ...]] = set()
     combos: list[dict[str, int]] = []
 
-    def _add(values: tuple[int, ...]) -> None:
-        if values not in seen and len(combos) < max_combos:
+    def _add(values: tuple[int, ...]) -> bool:
+        if values not in seen:
             seen.add(values)
             combos.append(dict(zip(keys, values)))
+            return True
+        return False
 
-    # 1. All-zeros baseline.
+    # 1. All-zeros base_pages sentinel row.
     _add(tuple(0 for _ in keys))
 
     # 2. All-max combination (every key at access_count + 1 — page never broken).
     _add(tuple(access_counts[k] + 1 for k in keys))
 
-    # 3. Single-key-at-max variants (one key at max, others at 0).
-    for i, key in enumerate(keys):
-        if len(combos) >= max_combos:
+    # 3. Split-only hot-key rows.
+    never_break_values = [access_counts[k] + 1 for k in keys]
+    added_hot = 0
+    for key in keys:
+        if added_hot >= hot_keys:
             break
-        values = [0] * len(keys)
-        values[i] = access_counts[key] + 1
-        _add(tuple(values))
+        values = list(never_break_values)
+        values[key_to_index[key]] = 0
+        if _add(tuple(values)):
+            added_hot += 1
 
-    # 4. Random combinations for remaining slots.
-    max_attempts = max_combos * 10
-    for _ in range(max_attempts):
-        if len(combos) >= max_combos:
+    # 4. Random split-only rows from the remaining keys.
+    shuffled_keys = random.sample(keys, len(keys))
+    added_random = 0
+    for key in shuffled_keys:
+        if added_random >= random_rows:
             break
-        values = tuple(random.randint(0, access_counts[k] + 1) for k in keys)
-        _add(values)
+        values = list(never_break_values)
+        values[key_to_index[key]] = 0
+        if _add(tuple(values)):
+            added_random += 1
 
     return combos
 
@@ -216,8 +259,9 @@ def write_parquet(combos: list[dict[str, int]], output_path: Path) -> None:
     """Write breakpoint combinations to a Parquet file.
 
     Each row represents one combination; each column is a replay-time
-    split target whose value is the access number at which to break
-    (0 = no break).
+    split target whose value is the access number at which to break.
+    An all-zero row is the ``base_pages`` sentinel, while
+    ``access_counts[key] + 1`` means never split that key.
 
     Args:
         combos: List of breakpoint dicts as returned by
@@ -258,7 +302,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Parse a redis-cli monitor log and generate a Parquet file of "
-            "replay-time split targets."
+            "replay-time split targets. The first generated row is the "
+            "all-zero base_pages sentinel, the second row is no_break."
         ),
     )
     parser.add_argument(
@@ -276,10 +321,16 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
-        "--max-combos",
+        "--hot-keys",
         type=int,
         default=10,
-        help="Maximum number of breakpoint combinations to generate (default: 10).",
+        help="Number of split-only hot-key rows to generate (default: 10).",
+    )
+    parser.add_argument(
+        "--random-rows",
+        type=int,
+        default=3,
+        help="Number of random combination rows to generate (default: 3).",
     )
     return parser
 
@@ -299,7 +350,11 @@ def main(argv: list[str] | None = None) -> None:
     access_counts = parse_log(log_path)
     _print_summary(access_counts)
 
-    combos = generate_combinations(access_counts, max_combos=args.max_combos)
+    combos = generate_combinations(
+        access_counts,
+        hot_keys=args.hot_keys,
+        random_rows=args.random_rows,
+    )
     write_parquet(combos, output_path)
 
     print(

@@ -5,32 +5,36 @@ Pipeline overview::
 We assume that a redis-server is started via
 ``redis-server ./config/redis.conf'' before the capture script. 
 
-    1. Capture  -- ``scripts/capture_redis_trace.sh``
+    1. Capture  -- ``python/kernmlops/replay/capture_redis_trace.sh``
                    Runs YCSB load, saves an RDB snapshot to
                    ``data/redis_traces/snapshot.rdb``, then records
                    ``redis-cli monitor`` output for the run phase to
                    ``data/redis_traces/monitor_run.log``.
 
-    2. Generate -- ``python generate_breakpoints.py <monitor_run_log>``
+    2. Generate -- ``python python/kernmlops/replay/generate_breakpoints.py <monitor_run_log>``
                    Parses the monitor log, counts per-key accesses, and writes
                    a Parquet file of breakpoint combinations to
                    ``data/breakpoints.parquet``.
                    
-    3. Replay   -- ``python replay_trace.py <snapshot.rdb> <run_log> --breakpoints bp.parquet``
+    3. Replay   -- ``python python/kernmlops/replay/replay_trace.py <snapshot.rdb> <run_log> --breakpoints bp.parquet``
                    For each breakpoint combination in the Parquet file:
                      a. Restore the RDB snapshot (exact key-value layout from load).
                      b. MEMORY PURGE to reset allocator state.
-                     c. Time the replay of the run trace with the combination's
+                     c. Optionally collect configured replay counters on the host.
+                     d. Time the replay of the run trace with the combination's
                         per-key breakpoints.
                    Saves a result Parquet with the breakpoint vectors and
                    measured runtimes.
 
 Usage::
 
-    python replay_trace.py data/redis_traces/snapshot.rdb data/redis_traces/monitor_run.log \\
-        --host 127.0.0.1 --port 6379 \\
+    python python/kernmlops/replay/replay_trace.py \\
+        data/redis_traces/snapshot.rdb data/redis_traces/monitor_run.log \\
         --breakpoints data/breakpoints.parquet \\
         --output data/results.parquet
+
+Replay reads the Redis bind and port from ``config/redis.conf`` so the replay
+client always targets the same endpoint as the repo-managed Redis server.
 """
 
 from __future__ import annotations
@@ -40,15 +44,31 @@ import ctypes
 import errno
 import logging
 import os
+import queue
 import re
 import subprocess
+import sys
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
+
+if __package__ in {None, ""}:
+    _PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+    _PACKAGE_ROOT_STR = str(_PACKAGE_ROOT)
+    if _PACKAGE_ROOT_STR not in sys.path:
+        sys.path.insert(0, _PACKAGE_ROOT_STR)
 
 import polars as pl
 import redis
+import yaml
+from replay.hardware_collectors import (
+    DTLBCounterMetrics,
+    HardwareCollector,
+)
+from redis_runtime import load_repo_redis_endpoint
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +146,225 @@ class SystemConfig:
     ksm_run: str | None
 
 
+@dataclass(frozen=True)
+class SplitPageResult:
+    """Outcome of one replay-time attempt to split a key's THP.
+
+    Attributes:
+        vaddr: Resolved value address returned by ``VAPTR``.
+        attempts: Number of syscall attempts issued for this split event.
+        error: Final syscall error, or ``None`` when the split succeeded.
+    """
+
+    vaddr: int
+    attempts: int
+    error: OSError | None
+
+
+@dataclass(frozen=True)
+class ReplayStats:
+    """Aggregate runtime-only replay stats for one timed run.
+
+    Example output:
+        {
+            "commands_replayed": 4096,
+            "split_events": 14,
+            "split_successes": 12,
+            "split_failures": 2,
+            "split_syscall_attempts": 18,
+            "split_max_attempts": 2,
+        }
+
+    Attributes:
+        commands_replayed: Successful Redis commands executed from the trace.
+        split_events: Replay-time split triggers encountered.
+        split_successes: Split triggers that succeeded.
+        split_failures: Split triggers that exhausted retries and failed.
+        split_syscall_attempts: Total syscall attempts across all split events.
+        split_max_attempts: Largest attempt count used by any single split event.
+        split_total_wall_ms: Total wall-clock split time across all split events.
+        split_max_wall_ms: Largest wall-clock split time for any single event.
+        split_queue_lag_ms_mean: Mean queue lag before a threaded split started.
+        split_queue_lag_ms_max: Largest queue lag before a threaded split started.
+    """
+
+    commands_replayed: int
+    split_events: int
+    split_successes: int
+    split_failures: int
+    split_syscall_attempts: int
+    split_max_attempts: int
+    split_total_wall_ms: float = 0.0
+    split_max_wall_ms: float = 0.0
+    split_queue_lag_ms_mean: float = 0.0
+    split_queue_lag_ms_max: float = 0.0
+
+
+@dataclass(frozen=True)
+class _SplitRequest:
+    """One queued replay-time split request for threaded dispatch.
+
+    Attributes:
+        key: Redis key whose THP should be split.
+        line_no: Monitor-log line number that triggered the split.
+        breakpoint: Access count at which the split fired.
+        enqueued_at: ``perf_counter`` timestamp when the hot path queued it.
+    """
+
+    key: str
+    line_no: int
+    breakpoint: int
+    enqueued_at: float
+
+
+@dataclass(frozen=True)
+class _CompletedSplit:
+    """One completed split request plus timing metadata."""
+
+    result: SplitPageResult
+    wall_ms: float
+    queue_lag_ms: float
+
+
+class _ThreadedBreakWorker:
+    """Process replay split requests on a dedicated background thread.
+
+    The worker owns its own Redis client so the replay hot path never shares
+    the main client object across threads.
+    """
+
+    def __init__(
+        self,
+        *,
+        client_kwargs: dict[str, object],
+        redis_pid: int,
+    ) -> None:
+        self._client_kwargs = client_kwargs
+        self._redis_pid = redis_pid
+        self._queue: queue.Queue[_SplitRequest | None] = queue.Queue()
+        self._completed: list[_CompletedSplit] = []
+        self._exception: BaseException | None = None
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(
+            target=self._run,
+            name="replay-break-worker",
+            daemon=True,
+        )
+
+    def start(self) -> None:
+        """Start the background split worker."""
+
+        self._thread.start()
+
+    def enqueue(self, request: _SplitRequest) -> None:
+        """Queue one split request, failing immediately on worker errors."""
+
+        self.raise_if_failed()
+        self._queue.put(request)
+
+    def raise_if_failed(self) -> None:
+        """Raise the first worker exception if one was recorded."""
+
+        if self._exception is not None:
+            raise RuntimeError(
+                "Threaded break dispatch failed during replay."
+            ) from self._exception
+
+    def finish(self) -> tuple[_CompletedSplit, ...]:
+        """Drain the queue, stop the worker, and return completed splits."""
+
+        self._queue.put(None)
+        self._queue.join()
+        self._thread.join()
+        self.raise_if_failed()
+        return tuple(self._completed)
+
+    def abort(self) -> None:
+        """Stop the worker after the current item and discard future work."""
+
+        self._stop_event.set()
+        self._queue.put(None)
+        self._queue.join()
+        self._thread.join()
+
+    def _run(self) -> None:
+        """Process queued split requests until a sentinel is received."""
+
+        client = redis.Redis(**self._client_kwargs)
+        while True:
+            request = self._queue.get()
+            try:
+                if request is None:
+                    return
+                if self._stop_event.is_set():
+                    continue
+
+                started_at = time.perf_counter()
+                queue_lag_ms = (started_at - request.enqueued_at) * 1000.0
+                result = _invoke_break_page(
+                    client,
+                    self._redis_pid,
+                    request.key,
+                    request.line_no,
+                    request.breakpoint,
+                )
+                wall_ms = (time.perf_counter() - started_at) * 1000.0
+                self._completed.append(
+                    _CompletedSplit(
+                        result=result,
+                        wall_ms=wall_ms,
+                        queue_lag_ms=queue_lag_ms,
+                    )
+                )
+            except BaseException as exc:  # pragma: no cover - fail-fast path
+                self._exception = exc
+                self._stop_event.set()
+            finally:
+                self._queue.task_done()
+
+
+def _resolve_break_dispatch(
+    break_dispatch: Literal["inline", "threaded", "mixed"],
+    *,
+    run_number: int,
+    runs: int,
+) -> Literal["inline", "threaded"]:
+    """Resolve the effective break-dispatch mode for one timed run.
+
+    ``mixed`` means the first half of runs are inline and the second half are
+    threaded. This requires an even total run count.
+
+    Raises:
+        RuntimeError: If ``mixed`` was requested with an odd run count.
+    """
+
+    if break_dispatch == "mixed":
+        if runs % 2 != 0:
+            raise RuntimeError(
+                "Break dispatch mode 'mixed' requires an even --runs value."
+            )
+        return "inline" if run_number <= runs // 2 else "threaded"
+    return break_dispatch
+
+
+def _summarize_completed_splits(
+    completed_splits: tuple[_CompletedSplit, ...],
+) -> tuple[float, float, float, float]:
+    """Return total/max split wall time and mean/max queue lag in milliseconds."""
+
+    if not completed_splits:
+        return (0.0, 0.0, 0.0, 0.0)
+
+    wall_times = [split.wall_ms for split in completed_splits]
+    queue_lags = [split.queue_lag_ms for split in completed_splits]
+    return (
+        sum(wall_times),
+        max(wall_times),
+        sum(queue_lags) / len(queue_lags),
+        max(queue_lags),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
@@ -159,6 +398,89 @@ def parse_line(line: str) -> RedisCommand | None:
         args=args,
         key=args[0] if args else "",
     )
+
+
+def _require_root_for_counter_collection(counter_names: tuple[str, ...]) -> None:
+    """Fail fast when replay counters are requested without root privileges.
+
+    Replay opens direct ``perf_event_open`` counters for the Redis thread set on
+    the host. In the environments used by this repo that path is run under
+    ``sudo`` so replay fails immediately when direct replay counters are
+    requested without an effective root user.
+
+    Example input:
+        ("dtlb_loads", "dtlb_misses")
+
+    Raises:
+        PermissionError: If the current process is not running as root.
+    """
+    if not counter_names:
+        return
+    if os.geteuid() != 0:
+        counters = ", ".join(counter_names)
+        raise PermissionError(
+            f"Replay collectors [{counters}] require sudo/root because the "
+            "replay counters use direct perf_event counters on the host."
+        )
+
+
+def _load_counter_config(config_path: Path | None) -> tuple[str, ...]:
+    """Load replay counter names from a small YAML collector config.
+
+    Expected YAML shape:
+        {"collectors": ["dtlb_loads", "dtlb_misses"]}
+
+    Args:
+        config_path: Optional path to the replay collector config YAML.
+
+    Returns:
+        Ordered replay counter names to collect during each timed run.
+
+    Raises:
+        RuntimeError: If the YAML shape is invalid or requests an unknown
+            replay counter.
+    """
+    if config_path is None:
+        return ()
+
+    raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if raw_config is None:
+        return ()
+    if not isinstance(raw_config, dict):
+        raise RuntimeError(
+            "Replay collector config must be a YAML mapping with a "
+            "'collectors' list."
+        )
+
+    raw_collectors = raw_config.get("collectors", [])
+    if not isinstance(raw_collectors, list) or any(
+        not isinstance(counter_name, str) for counter_name in raw_collectors
+    ):
+        raise RuntimeError(
+            "Replay collector config must define 'collectors' as a list of "
+            "counter names."
+        )
+
+    normalized_collectors: list[str] = []
+    seen: set[str] = set()
+    supported = set(HardwareCollector.supported_counter_names())
+    for raw_counter_name in raw_collectors:
+        counter_name = raw_counter_name.strip()
+        if not counter_name:
+            raise RuntimeError(
+                "Replay collector config cannot include empty counter names."
+            )
+        if counter_name not in supported:
+            supported_text = ", ".join(HardwareCollector.supported_counter_names())
+            raise RuntimeError(
+                f"Unsupported replay counter {counter_name!r}. Supported "
+                f"counters: {supported_text}."
+            )
+        if counter_name in seen:
+            continue
+        normalized_collectors.append(counter_name)
+        seen.add(counter_name)
+    return tuple(normalized_collectors)
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +588,7 @@ def _resolve_key_vaddr(client: redis.Redis, key: str) -> int:
         Virtual address of that value as an integer.
 
     Raises:
+        FileNotFoundError: If the key no longer has a direct pointer to split.
         RuntimeError: If VAPTR is unavailable or returns an unexpected shape.
     """
     reply = client.execute_command("VAPTR", "FIELD", VAPTR_FIELD_NAME, key)
@@ -281,7 +604,8 @@ def _resolve_key_vaddr(client: redis.Redis, key: str) -> int:
             f"VAPTR returned key {reply_key!r} while resolving {key!r}: {reply!r}"
         )
     if reply_vaddr == "(nil)":
-        raise RuntimeError(
+        raise FileNotFoundError(
+            errno.ENOENT,
             f"VAPTR did not resolve a direct pointer for key {key!r} field {VAPTR_FIELD_NAME!r}"
         )
 
@@ -338,16 +662,16 @@ def break_page(client: redis.Redis, redis_pid: int, key: str) -> bool:
     Raises:
         RuntimeError: If Redis metadata or VAPTR resolution is not usable.
     """
-    vaddr, error = _break_page_for_pid(client, redis_pid, key)
-    if error is not None:
+    result = _break_page_for_pid(client, redis_pid, key)
+    if result.error is not None:
         logger.warning(
             "break_page: split_thp(pid=%d, vaddr=0x%x) failed for key %r after %d attempts: errno=%d (%s)",
             redis_pid,
-            vaddr,
+            result.vaddr,
             key,
-            BREAK_PAGE_MAX_ATTEMPTS,
-            error.errno,
-            error.strerror,
+            result.attempts,
+            result.error.errno,
+            result.error.strerror,
         )
         return False
 
@@ -358,7 +682,7 @@ def _break_page_for_pid(
     client: redis.Redis,
     redis_pid: int,
     key: str,
-) -> tuple[int, OSError | None]:
+) -> SplitPageResult:
     """Resolve one Redis key and retry the split syscall for its value address.
 
     This resolves ``field0`` exactly once, then retries only the
@@ -366,7 +690,7 @@ def _break_page_for_pid(
     as configuration errors and raised immediately.
 
     Example result:
-        (0x7fffef580009, None)
+        {"vaddr": 0x7fffef580009, "attempts": 1, "error": None}
 
     Args:
         client: Active Redis connection with ``decode_responses=True``.
@@ -374,20 +698,22 @@ def _break_page_for_pid(
         key: Redis key whose ``field0`` value should be split.
 
     Returns:
-        A pair ``(vaddr, error)`` where ``error`` is ``None`` on success or
-        the final ``OSError`` after ``BREAK_PAGE_MAX_ATTEMPTS`` failed syscall
-        attempts.
+        A ``SplitPageResult`` describing the resolved address, how many syscall
+        attempts were used, and the final syscall error if the split failed.
 
     Raises:
-        RuntimeError: If VAPTR does not resolve a usable address.
+        RuntimeError: If VAPTR returns malformed metadata.
     """
-    vaddr = _resolve_key_vaddr(client, key)
+    try:
+        vaddr = _resolve_key_vaddr(client, key)
+    except FileNotFoundError as exc:
+        return SplitPageResult(vaddr=0, attempts=0, error=exc)
     last_error: OSError | None = None
 
     for attempt in range(1, BREAK_PAGE_MAX_ATTEMPTS + 1):
         try:
             _invoke_split_thp_syscall(redis_pid, vaddr)
-            return vaddr, None
+            return SplitPageResult(vaddr=vaddr, attempts=attempt, error=None)
         except OSError as exc:
             last_error = exc
             if attempt < BREAK_PAGE_MAX_ATTEMPTS:
@@ -402,7 +728,11 @@ def _break_page_for_pid(
                     exc.strerror,
                 )
 
-    return vaddr, last_error
+    return SplitPageResult(
+        vaddr=vaddr,
+        attempts=BREAK_PAGE_MAX_ATTEMPTS,
+        error=last_error,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -418,12 +748,56 @@ def _sysfs_write(path: Path, value: str) -> None:
     )
 
 
+def _set_thp_enabled_mode(mode: str) -> None:
+    """Set the host Transparent Huge Page enabled mode for the next restore.
+
+    Replay uses two THP modes:
+
+    - ``always`` for the intact-THP and split-only replay rows
+    - ``never`` for the ``base_pages`` sentinel row
+
+    Example input:
+        "never"
+
+    Args:
+        mode: THP enabled mode to apply before the next Redis restore.
+
+    Raises:
+        RuntimeError: If *mode* is not one of the supported replay modes.
+    """
+    if mode not in {"always", "never"}:
+        raise RuntimeError(
+            f"Unsupported replay THP mode {mode!r}; expected 'always' or 'never'."
+        )
+    _sysfs_write(_THP_PATH, mode)
+
+
+def _stage_snapshot_for_restore(snapshot_path: Path, rdb_path: Path) -> None:
+    """Place the preserved snapshot at Redis's active ``dump.rdb`` path.
+
+    Replay stages the preserved snapshot with a hard link. This is a fail-fast
+    setup step: if the snapshot and Redis data directory are not link-compatible,
+    replay should stop instead of silently taking a different restore path.
+
+    Args:
+        snapshot_path: Preserved snapshot file owned by the experiment.
+        rdb_path: Active Redis ``dump.rdb`` location.
+    """
+    subprocess.run(["sudo", "rm", "-f", str(rdb_path)], check=True)
+    subprocess.run(
+        ["sudo", "ln", str(snapshot_path), str(rdb_path)],
+        check=True,
+    )
+
+
+
 def setup_system() -> SystemConfig:
     """Snapshot kernel tunables and apply benchmark-optimal settings.
 
     Sets THP to ``always`` so all Redis allocations begin as huge pages
-    (breakpoints are then used to break them up selectively). Disables
-    background memory management that would otherwise add timing noise:
+    by default. Individual replay rows may later switch THP to ``never`` before
+    restoring Redis for the ``base_pages`` baseline. Disables background memory
+    management that would otherwise add timing noise:
     THP defrag, khugepaged, NUMA balancing, KSM, proactive compaction,
     and swap. Pins overcommit_memory to ``1`` (always allow) for
     consistent allocator behaviour.
@@ -523,11 +897,14 @@ def _wait_for_redis(client: redis.Redis, timeout: float = 30.0) -> None:
     raise TimeoutError(f"Redis did not become reachable within {timeout}s")
 
 
-def restore_snapshot(client: redis.Redis, snapshot_path: Path) -> None:
+def restore_snapshot(
+    client: redis.Redis,
+    snapshot_path: Path,
+) -> None:
     """Restore Redis to the state captured in an RDB snapshot.
 
     Copies *snapshot_path* to ``dump.rdb`` in the current directory, stops the
-    active Redis process, and restarts with ``redis-server ./config/redis.conf``.
+    active Redis process, and restarts it.
 
     Args:
         client: An active Redis connection.
@@ -538,7 +915,7 @@ def restore_snapshot(client: redis.Redis, snapshot_path: Path) -> None:
     rdb_dir = client.config_get("dir")["dir"]
     rdb_file = client.config_get("dbfilename")["dbfilename"]
     rdb_path = Path(rdb_dir) / rdb_file
-    subprocess.run(["sudo", "cp", str(snapshot_path), rdb_path], check=True)
+    _stage_snapshot_for_restore(snapshot_path, rdb_path)
     try:
         client.execute_command("SHUTDOWN", "NOSAVE")
     except redis.ConnectionError:
@@ -546,7 +923,14 @@ def restore_snapshot(client: redis.Redis, snapshot_path: Path) -> None:
 
     _wait_for_redis_exit(pid)
 
-    start_redis = ["redis-server", "./config/redis.conf", "--dir", rdb_dir, "--dbfilename", rdb_file]
+    start_redis = [
+        "redis-server",
+        "./config/redis.conf",
+        "--dir",
+        rdb_dir,
+        "--dbfilename",
+        rdb_file,
+    ]
     vaptr_module = Path("redis-module/vaptr.so")
     if vaptr_module.exists():
         start_redis += ["--loadmodule", str(vaptr_module.resolve())]
@@ -569,7 +953,9 @@ def replay(
     trace_path: Path,
     client: redis.Redis,
     breakpoints: dict[str, int] | None = None,
-) -> int:
+    *,
+    break_dispatch: Literal["inline", "threaded"] = "inline",
+) -> ReplayStats:
     """Replay a redis-cli MONITOR log against a live Redis instance.
 
     Args:
@@ -577,41 +963,115 @@ def replay(
         client: Active Redis connection to the server being replayed.
         breakpoints: Optional ``{key: access_num}`` mapping. ``None``
             disables breakpoint checking.
+        break_dispatch: Split-dispatch mode for this run. ``inline`` breaks on
+            the hot path; ``threaded`` queues split requests to a background
+            worker.
 
     Returns:
-        Total number of commands replayed.
+        Runtime-only replay stats for this timed run.
     """
     if breakpoints is None:
         breakpoints = {}
+    if break_dispatch not in {"inline", "threaded"}:
+        raise RuntimeError(
+            f"Unsupported replay break dispatch {break_dispatch!r}; expected "
+            "'inline' or 'threaded'."
+        )
 
     redis_pid = _get_redis_pid(client)
+    threaded_worker: _ThreadedBreakWorker | None = None
+    if break_dispatch == "threaded":
+        threaded_worker = _ThreadedBreakWorker(
+            client_kwargs=dict(client.connection_pool.connection_kwargs),
+            redis_pid=redis_pid,
+        )
+        threaded_worker.start()
 
     access_counts: Counter[str] = Counter()
+    commands_replayed = 0
+    split_events = 0
+    split_successes = 0
+    split_failures = 0
+    split_syscall_attempts = 0
+    split_max_attempts = 0
+    completed_splits: list[_CompletedSplit] = []
 
-    with open(trace_path, encoding="utf-8") as fh:
-        for line_no, raw_line in enumerate(fh, start=1):
-            cmd = parse_line(raw_line)
-            if cmd is None:
-                continue
+    try:
+        with open(trace_path, encoding="utf-8") as fh:
+            for line_no, raw_line in enumerate(fh, start=1):
+                cmd = parse_line(raw_line)
+                if cmd is None:
+                    continue
 
-            key = cmd.key
+                key = cmd.key
 
-            # --- Breakpoint check (fires before the N-th access) ----------
-            if key and key in breakpoints:
-                if access_counts[key] == breakpoints[key]:
-                    _invoke_break_page(
-                        client,
-                        redis_pid,
-                        key,
-                        line_no,
-                        breakpoints[key],
-                    )
+                # --- Breakpoint check (fires before the N-th access) ----------
+                if key and key in breakpoints:
+                    if access_counts[key] == breakpoints[key]:
+                        split_events += 1
+                        if break_dispatch == "inline":
+                            started_at = time.perf_counter()
+                            split_result = _invoke_break_page(
+                                client,
+                                redis_pid,
+                                key,
+                                line_no,
+                                breakpoints[key],
+                            )
+                            wall_ms = (time.perf_counter() - started_at) * 1000.0
+                            completed_splits.append(
+                                _CompletedSplit(
+                                    result=split_result,
+                                    wall_ms=wall_ms,
+                                    queue_lag_ms=0.0,
+                                )
+                            )
+                        else:
+                            threaded_worker.enqueue(
+                                _SplitRequest(
+                                    key=key,
+                                    line_no=line_no,
+                                    breakpoint=breakpoints[key],
+                                    enqueued_at=time.perf_counter(),
+                                )
+                            )
 
-            # --- Execute against Redis ------------------------------------
-            if _execute(client, cmd, line_no) and key:
-                access_counts[key] += 1
+                # --- Execute against Redis ------------------------------------
+                if _execute(client, cmd, line_no):
+                    commands_replayed += 1
+                    if key:
+                        access_counts[key] += 1
 
-    return sum(access_counts.values())
+                if threaded_worker is not None:
+                    threaded_worker.raise_if_failed()
+    finally:
+        if threaded_worker is not None:
+            completed_splits.extend(threaded_worker.finish())
+
+    for completed_split in completed_splits:
+        split_syscall_attempts += completed_split.result.attempts
+        split_max_attempts = max(split_max_attempts, completed_split.result.attempts)
+        if completed_split.result.error is None:
+            split_successes += 1
+        else:
+            split_failures += 1
+
+    split_total_wall_ms, split_max_wall_ms, split_queue_lag_ms_mean, split_queue_lag_ms_max = (
+        _summarize_completed_splits(tuple(completed_splits))
+    )
+
+    return ReplayStats(
+        commands_replayed=commands_replayed,
+        split_events=split_events,
+        split_successes=split_successes,
+        split_failures=split_failures,
+        split_syscall_attempts=split_syscall_attempts,
+        split_max_attempts=split_max_attempts,
+        split_total_wall_ms=split_total_wall_ms,
+        split_max_wall_ms=split_max_wall_ms,
+        split_queue_lag_ms_mean=split_queue_lag_ms_mean,
+        split_queue_lag_ms_max=split_queue_lag_ms_max,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -625,7 +1085,7 @@ def _invoke_break_page(
     key: str,
     line_no: int,
     breakpoint: int,
-) -> None:
+) -> SplitPageResult:
     """Invoke the replay-time THP split for one key.
 
     Args:
@@ -638,20 +1098,20 @@ def _invoke_break_page(
     Raises:
         RuntimeError: If VAPTR resolution fails.
     """
-    vaddr, error = _break_page_for_pid(client, redis_pid, key)
-    if error is not None:
+    result = _break_page_for_pid(client, redis_pid, key)
+    if result.error is not None:
         logger.warning(
             "line %d: break_page failed for key '%s' at access %d after %d attempts: pid=%d vaddr=0x%x errno=%d (%s)",
             line_no,
             key,
             breakpoint,
-            BREAK_PAGE_MAX_ATTEMPTS,
+            result.attempts,
             redis_pid,
-            vaddr,
-            error.errno,
-            error.strerror,
+            result.vaddr,
+            result.error.errno,
+            result.error.strerror,
         )
-        return
+    return result
 
 def _execute(
     client: redis.Redis,
@@ -685,6 +1145,7 @@ def _execute(
     return False
 
 
+
 # ---------------------------------------------------------------------------
 # Benchmark loop
 # ---------------------------------------------------------------------------
@@ -694,17 +1155,19 @@ def run_benchmark(
     snapshot_path: Path,
     run_trace: Path,
     breakpoints_df: pl.DataFrame,
-    host: str,
-    port: int,
     output: Path,
     runs: int = 3,
+    collectors: tuple[str, ...] = (),
+    break_dispatch: Literal["inline", "threaded", "mixed"] = "inline",
 ) -> None:
     """For each breakpoint combination: restore snapshot, then time the run.
 
     Calls :func:`setup_system` once before the loop to set THP to ``always``
-    and silence background memory management noise, then restores original
-    settings unconditionally via :func:`teardown_system` in a ``finally``
-    block.
+    and silence background memory management noise. Any non-empty all-zero
+    breakpoint row is treated as the ``base_pages`` sentinel: replay flips THP
+    to ``never`` before restoring Redis for that row and replays it without
+    replay-time split syscalls. Original host settings are restored
+    unconditionally via :func:`teardown_system` in a ``finally`` block.
 
     Each combination is replayed *runs* times. The output Parquet file
     contains the breakpoint vector plus ``runtime_s_1``, ``runtime_s_2``,
@@ -714,12 +1177,21 @@ def run_benchmark(
         snapshot_path: Path to ``snapshot.rdb`` from ``capture_redis_trace.sh``.
         run_trace: Path to the monitor_run.log file.
         breakpoints_df: Parquet-derived DataFrame; each row is one combo.
-        host: Redis server hostname or IP.
-        port: Redis server port.
         output: Destination Parquet file for results.
         runs: Number of times to replay each breakpoint combination.
+        collectors: Replay counters to collect for each timed run. Each
+            configured counter adds ``<counter_name>_<run>`` columns to the
+            results parquet.
+        break_dispatch: Split-dispatch policy for timed runs. ``mixed`` means
+            the first half of runs are inline and the second half are threaded.
     """
-    client = redis.Redis(host=host, port=port, decode_responses=True)
+    redis_endpoint = load_repo_redis_endpoint()
+    client = redis.Redis(
+        host=redis_endpoint.host,
+        port=redis_endpoint.port,
+        decode_responses=True,
+    )
+    hw_collector = HardwareCollector()
 
     results: list[dict] = []
     n_combos = len(breakpoints_df)
@@ -729,20 +1201,32 @@ def run_benchmark(
         for idx, row in enumerate(breakpoints_df.iter_rows(named=True)):
             breakpoints: dict[str, int] = dict(row)
             row_result: dict = {**breakpoints}
+            is_base_pages = idx == 0
+            thp_mode = "never" if is_base_pages else "always"
+            effective_breakpoints = {} if is_base_pages else breakpoints
 
             for run in range(1, runs + 1):
+                effective_break_dispatch = _resolve_break_dispatch(
+                    break_dispatch,
+                    run_number=run,
+                    runs=runs,
+                )
                 # 1. Restore snapshot
                 logger.info(
-                    "[%d/%d run %d/%d] Restoring snapshot ...",
+                    "[%d/%d run %d/%d] Restoring snapshot (THP %s, break dispatch %s) ...",
                     idx + 1,
                     n_combos,
                     run,
                     runs,
+                    thp_mode,
+                    effective_break_dispatch,
                 )
+                _set_thp_enabled_mode(thp_mode)
                 restore_snapshot(client, snapshot_path)
 
                 # 2. Post-restore memory purge
                 memory_purge(client)
+                redis_tgid = _get_redis_pid(client)
 
                 # 3. Timed run replay
                 logger.info(
@@ -752,13 +1236,23 @@ def run_benchmark(
                     run,
                     runs,
                 )
+                counters_started = False
+                if collectors:
+                    hw_collector.start_counters(list(collectors), redis_tgid)
+                    counters_started = True
+
                 t0 = time.perf_counter()
-                total_cmds = replay(
+                replay_stats = replay(
                     run_trace,
                     client,
-                    breakpoints=breakpoints,
+                    breakpoints=effective_breakpoints,
+                    break_dispatch=effective_break_dispatch,
                 )
                 runtime_s = time.perf_counter() - t0
+
+                counter_totals: dict[str, int] = {}
+                if collectors and counters_started:
+                    counter_totals = hw_collector.stop_counters(list(collectors))
 
                 logger.info(
                     "[%d/%d run %d/%d] Done — %d commands in %.3fs",
@@ -766,10 +1260,35 @@ def run_benchmark(
                     n_combos,
                     run,
                     runs,
-                    total_cmds,
+                    replay_stats.commands_replayed,
                     runtime_s,
                 )
+                row_result["row_index"] = idx
+                row_result["thp_mode"] = thp_mode
+                row_result[f"break_dispatch_{run}"] = effective_break_dispatch
                 row_result[f"runtime_s_{run}"] = runtime_s
+                row_result[f"commands_replayed_{run}"] = replay_stats.commands_replayed
+                row_result[f"split_events_{run}"] = replay_stats.split_events
+                row_result[f"split_successes_{run}"] = replay_stats.split_successes
+                row_result[f"split_failures_{run}"] = replay_stats.split_failures
+                row_result[f"split_syscall_attempts_{run}"] = (
+                    replay_stats.split_syscall_attempts
+                )
+                row_result[f"split_max_attempts_{run}"] = replay_stats.split_max_attempts
+                row_result[f"split_total_wall_ms_{run}"] = (
+                    replay_stats.split_total_wall_ms
+                )
+                row_result[f"split_max_wall_ms_{run}"] = (
+                    replay_stats.split_max_wall_ms
+                )
+                row_result[f"split_queue_lag_ms_mean_{run}"] = (
+                    replay_stats.split_queue_lag_ms_mean
+                )
+                row_result[f"split_queue_lag_ms_max_{run}"] = (
+                    replay_stats.split_queue_lag_ms_max
+                )
+                for counter_name, total in counter_totals.items():
+                    row_result[f"{counter_name}_{run}"] = total
 
             results.append(row_result)
 
@@ -804,18 +1323,6 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to the redis-cli monitor log for the YCSB run phase.",
     )
     parser.add_argument(
-        "--host",
-        type=str,
-        default="127.0.0.1",
-        help="Redis host (default: 127.0.0.1).",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=6379,
-        help="Redis port (default: 6379).",
-    )
-    parser.add_argument(
         "--breakpoints",
         type=Path,
         default=Path("data/breakpoints.parquet"),
@@ -833,6 +1340,27 @@ def _build_parser() -> argparse.ArgumentParser:
         type=int,
         default=3,
         help="Number of times to replay each breakpoint combination (default: 3).",
+    )
+    parser.add_argument(
+        "--break-dispatch",
+        choices=("inline", "threaded", "mixed"),
+        default="inline",
+        help=(
+            "How replay should issue page splits. 'inline' breaks on the hot "
+            "path, 'threaded' queues work to a background thread, and "
+            "'mixed' uses inline for the first half of runs and threaded for "
+            "the second half."
+        ),
+    )
+    parser.add_argument(
+        "--collector-config",
+        type=Path,
+        default=None,
+        help=(
+            "YAML file describing which replay counters to collect. Example: "
+            "collectors: [dtlb_loads, dtlb_misses]. This currently requires "
+            "running replay under sudo on the host."
+        ),
     )
     parser.add_argument(
         "-v",
@@ -853,12 +1381,33 @@ def main() -> None:
         level=logging.INFO if args.verbose else logging.ERROR,
     )
 
+    if args.collector_config is not None and not args.collector_config.is_file():
+        parser.error(f"Collector config file not found: {args.collector_config}")
+    if args.break_dispatch == "mixed" and args.runs % 2 != 0:
+        parser.error("--break-dispatch mixed requires an even --runs value.")
+
+    try:
+        collector_names = _load_counter_config(args.collector_config)
+    except RuntimeError as exc:
+        parser.error(str(exc))
+
+    if collector_names:
+        try:
+            _require_root_for_counter_collection(collector_names)
+        except PermissionError as exc:
+            parser.error(str(exc))
+
     snapshot_path: Path = args.snapshot
     run_trace: Path = args.run_trace
 
     for p in (snapshot_path, run_trace):
         if not p.is_file():
             parser.error(f"File not found: {p}")
+
+    try:
+        load_repo_redis_endpoint()
+    except RuntimeError as exc:
+        parser.error(str(exc))
 
     if args.breakpoints is not None:
         bp_path: Path = args.breakpoints
@@ -872,10 +1421,10 @@ def main() -> None:
         snapshot_path=snapshot_path,
         run_trace=run_trace,
         breakpoints_df=breakpoints_df,
-        host=args.host,
-        port=args.port,
         output=args.output,
         runs=args.runs,
+        collectors=collector_names,
+        break_dispatch=args.break_dispatch,
     )
 
 

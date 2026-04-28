@@ -4,44 +4,26 @@ set -euo pipefail
 # Run YCSB load, snapshot the RDB, then capture a redis-cli monitor log for the run phase.
 # Parameters from config/redis_never.yaml.
 # Redis server must already be running. Run from the repository root.
-# Usage: ./scripts/capture_redis_trace.sh [-h] [-d ycsb_dir]
+# Usage: ./python/kernmlops/replay/capture_redis_trace.sh [-h] [-d ycsb_dir]
 
 # --- Constants ----------------------------------------------------------------
 
 readonly EXPLICIT_PURGE=true
 readonly SERVER_SLEEP=10
+readonly RECORD_COUNT="${RECORD_COUNT:-4096}"
+readonly OPERATION_COUNT="${OPERATION_COUNT:-4096}"
+readonly READ_PROPORTION="${READ_PROPORTION:-0.05}"
+readonly UPDATE_PROPORTION="${UPDATE_PROPORTION:-0.00}"
+readonly SCAN_PROPORTION="${SCAN_PROPORTION:-0.00}"
+readonly INSERT_PROPORTION="${INSERT_PROPORTION:-0.00}"
+readonly READMODIFYWRITE_PROPORTION="${READMODIFYWRITE_PROPORTION:-0.00}"
+readonly DELETE_PROPORTION="${DELETE_PROPORTION:-0.95}"
 
-readonly REDIS_HOST="127.0.0.1"
-readonly REDIS_PORT=6379
 readonly BENCHMARK_DIR_NAME="kernmlops-benchmark"
-
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-readonly TRACE_BASE_DIR="${SCRIPT_DIR}/../data/redis_traces"
-
-YCSB_PARAMS=(
-    -p "redis.host=${REDIS_HOST}"
-    -p "redis.port=${REDIS_PORT}"
-    -p "fieldcount=1"
-    -p "fieldlength=2097152"
-    -p "minfieldlength=4096"
-    -p "insertorder=hashed"
-    -p "zeropadding=1"
-    -p "fieldlengthdistribution=uniform"
-    -p "recordcount=4096"
-    -p "insertstart=0"
-    -p "operationcount=4096"
-    -p "workload=site.ycsb.workloads.CoreWorkload"
-    -p "readproportion=0.05"
-    -p "updateproportion=0.00"
-    -p "scanproportion=0.00"
-    -p "insertproportion=0.00"
-    -p "readmodifywriteproportion=0.00"
-    -p "deleteproportion=0.95"
-    -p "requestdistribution=zipfian"
-    -p "threadcount=16"
-    -p "target=10000"
-)
-readonly YCSB_PARAMS
+readonly REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+readonly TRACE_BASE_DIR="${REPO_ROOT}/data/redis_traces"
+readonly PYTHON_KERNMLOPS_DIR="${REPO_ROOT}/python/kernmlops"
 
 # --- Globals ------------------------------------------------------------------
 
@@ -56,8 +38,88 @@ die() {
     exit 1
 }
 
+load_redis_endpoint() {
+    PYTHONPATH="${PYTHON_KERNMLOPS_DIR}${PYTHONPATH:+:${PYTHONPATH}}" python - <<'PY'
+from redis_runtime import load_repo_redis_endpoint
+
+endpoint = load_repo_redis_endpoint()
+print(endpoint.host)
+print(endpoint.port)
+PY
+}
+
+mapfile -t REDIS_ENDPOINT_LINES < <(load_redis_endpoint)
+[[ "${#REDIS_ENDPOINT_LINES[@]}" -eq 2 ]] || die "Failed to read Redis endpoint from config/redis.conf"
+readonly REDIS_HOST="${REDIS_ENDPOINT_LINES[0]}"
+readonly REDIS_PORT="${REDIS_ENDPOINT_LINES[1]}"
+unset REDIS_ENDPOINT_LINES
+
+YCSB_PARAMS=(
+    -p "redis.host=${REDIS_HOST}"
+    -p "redis.port=${REDIS_PORT}"
+    -p "fieldcount=1"
+    -p "fieldlength=2097152"
+    -p "minfieldlength=4096"
+    -p "insertorder=hashed"
+    -p "zeropadding=1"
+    -p "fieldlengthdistribution=uniform"
+    -p "recordcount=${RECORD_COUNT}"
+    -p "insertstart=0"
+    -p "operationcount=${OPERATION_COUNT}"
+    -p "workload=site.ycsb.workloads.CoreWorkload"
+    -p "readproportion=${READ_PROPORTION}"
+    -p "updateproportion=${UPDATE_PROPORTION}"
+    -p "scanproportion=${SCAN_PROPORTION}"
+    -p "insertproportion=${INSERT_PROPORTION}"
+    -p "readmodifywriteproportion=${READMODIFYWRITE_PROPORTION}"
+    -p "deleteproportion=${DELETE_PROPORTION}"
+    -p "requestdistribution=zipfian"
+    -p "threadcount=16"
+    -p "target=10000"
+)
+readonly YCSB_PARAMS
+
 run_ycsb() {
     (cd "${YCSB_DIR}" && python bin/ycsb "$@")
+}
+
+validate_operation_mix() {
+    python - \
+        "${READ_PROPORTION}" \
+        "${UPDATE_PROPORTION}" \
+        "${SCAN_PROPORTION}" \
+        "${INSERT_PROPORTION}" \
+        "${READMODIFYWRITE_PROPORTION}" \
+        "${DELETE_PROPORTION}" <<'PY'
+import math
+import sys
+
+names = [
+    "READ_PROPORTION",
+    "UPDATE_PROPORTION",
+    "SCAN_PROPORTION",
+    "INSERT_PROPORTION",
+    "READMODIFYWRITE_PROPORTION",
+    "DELETE_PROPORTION",
+]
+values = []
+for name, raw in zip(names, sys.argv[1:], strict=True):
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise SystemExit(f"{name} must be numeric, got {raw!r}") from exc
+    if value < 0.0 or value > 1.0:
+        raise SystemExit(f"{name} must be in [0.0, 1.0], got {value}")
+    values.append(value)
+
+total = sum(values)
+if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-9):
+    raise SystemExit(
+        "YCSB operation proportions must sum to 1.0; "
+        f"got {total:.12f} from "
+        + ", ".join(f"{name}={value}" for name, value in zip(names, values, strict=True))
+    )
+PY
 }
 
 start_monitor() {
@@ -101,6 +163,7 @@ done
 [[ -x "${YCSB_DIR}/bin/ycsb" ]] || die "YCSB not found at ${YCSB_DIR}/bin/ycsb"
 
 redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT}" ping &>/dev/null || die "Cannot reach Redis at ${REDIS_HOST}:${REDIS_PORT}"
+validate_operation_mix
 
 # --- Setup --------------------------------------------------------------------
 
@@ -119,7 +182,9 @@ echo "Load complete." >&2
 # --- Snapshot -----------------------------------------------------------------
 # Save an RDB snapshot after the load so replay_trace.py can restore the
 # exact key-value layout (including value sizes) between benchmark iterations.
-# Triggers BGSAVE, waits for completion, then copies the RDB with sudo.
+# Triggers BGSAVE, waits for completion, then moves the finished RDB into the
+# preserved snapshot path. This avoids keeping two large copies of the same
+# snapshot on disk at once for the longer replay captures.
 
 snapshot_rdb="${output_dir}/snapshot.rdb"
 
@@ -135,7 +200,7 @@ while true; do
     [[ "${last_save_now}" -gt "${last_save_before}" ]] && break
     sleep 1
 done
-sudo cp "${rdb_dir}/${rdb_file}" "${snapshot_rdb}"
+sudo mv "${rdb_dir}/${rdb_file}" "${snapshot_rdb}"
 sudo chown "$(id -u):$(id -g)" "${snapshot_rdb}"
 echo "Snapshot saved to ${snapshot_rdb}" >&2
 

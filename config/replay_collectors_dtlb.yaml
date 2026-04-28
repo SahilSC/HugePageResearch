@@ -1,0 +1,3 @@
+collectors:
+  - dtlb_loads
+  - dtlb_misses

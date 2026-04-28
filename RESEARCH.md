@@ -10,18 +10,18 @@ Keep this file short, current, and useful for the next thread.
 ## Current Workflow
 
 - Capture:
-  - `scripts/capture_redis_trace.sh`
+  - `python/kernmlops/replay/capture_redis_trace.sh`
   - default dataset size: `4096` records
   - default run length: `45056` operations
 - Breakpoint generation:
-  - `python python/kernmlops/analysis/generate_breakpoints.py ...`
+  - `python python/kernmlops/replay/generate_breakpoints.py ...`
   - main experiment mode: `--combo-mode hotkey_harm`
   - row shape:
     - row 1: `all_break`
     - row 2: `no_break`
     - later rows: `split_only_this_hot_key`
 - Replay:
-  - `python python/kernmlops/data_collection/replay_trace.py ...`
+  - `python python/kernmlops/replay/replay_trace.py ...`
   - new replay flags:
     - `--redis-bin PATH`
     - `--collect-dtlb`
@@ -148,8 +148,8 @@ Why:
 ## Current Validation
 
 - `PYTHONPATH=python/kernmlops .venv/bin/python -m unittest testing.test_generate_breakpoints testing.test_replay_trace`
-- `python -m py_compile python/kernmlops/data_collection/replay_trace.py`
-- `bash -n scripts/capture_redis_trace.sh`
+- `python -m py_compile python/kernmlops/replay/replay_trace.py`
+- `bash -n python/kernmlops/replay/capture_redis_trace.sh`
 - Result:
   - `Ran 21 tests ... OK`
 
