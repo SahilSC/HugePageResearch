@@ -7,11 +7,11 @@ benchmark_config:
     transparent_hugepages: madvise
     overcommit_memory: never_check
   redis:
-    repeat: 1
+    repeat: 10
     field_count: 1
     min_field_length: 4096
     field_length: 2097152
-    outer_repeat: 10
+    outer_repeat: 20
     thread_count: 16
     record_count: 4096
     operation_count: 4096
@@ -21,6 +21,7 @@ benchmark_config:
     rmw_proportion: 0.00
     scan_proportion: 0.00
     delete_proportion: 0.95
+    insert_order: hashed
     field_length_distribution: "uniform"
     explicit_purge: true
 collector_config:
@@ -29,8 +30,4 @@ collector_config:
     output_dir: data
     output_graphs: false
     hooks:
-      - mm_rss_stat
       - process_trace
-      - madvise
-      - perf
-      - unmap_range

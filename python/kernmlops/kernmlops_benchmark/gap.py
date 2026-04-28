@@ -68,7 +68,12 @@ class GapBenchmark(Benchmark):
             create_graph_process.wait()
         self.generic_config.generic_setup()
 
-    def run(self) -> None:
+    def run(
+        self,
+        *,
+        run_dir: Path | None = None,
+        config_text: str | None = None,
+    ) -> None:
         if self.process is not None:
             raise BenchmarkRunningError()
         self.process = subprocess.Popen(

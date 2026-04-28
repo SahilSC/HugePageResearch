@@ -1,5 +1,6 @@
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import cast
 
 from data_schema import FileDataTable, GraphEngine, demote
@@ -68,7 +69,12 @@ class LinuxBuildBenchmark(Benchmark):
         )
         self.generic_config.generic_setup()
 
-    def run(self) -> None:
+    def run(
+        self,
+        *,
+        run_dir: Path | None = None,
+        config_text: str | None = None,
+    ) -> None:
         if self.process is not None:
             raise BenchmarkRunningError()
         jobs = f"-j{self.generic_config.cpus}" if self.generic_config.cpus else "-j"
