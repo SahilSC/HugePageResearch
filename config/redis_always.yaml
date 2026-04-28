@@ -12,16 +12,17 @@ benchmark_config:
     field_count: 1
     min_field_length: 4096
     field_length: 2097152
-    outer_repeat: 1
+    outer_repeat: 20
     thread_count: 16
     record_count: 4096
-    operation_count: 4096
-    read_proportion: 0.05
+    operation_count: 409600
+    read_proportion: 0.90
     update_proportion: 0.00
     insert_proportion: 0.00
     rmw_proportion: 0.00
     scan_proportion: 0.00
-    delete_proportion: 0.95
+    delete_proportion: 0.10
+    insert_order: hashed
     field_length_distribution: "uniform"
     explicit_purge: true
     server_sleep: 10s
@@ -31,8 +32,4 @@ collector_config:
     output_dir: data
     output_graphs: false
     hooks:
-      - mm_rss_stat
       - process_trace
-      - madvise
-      - perf
-      - unmap_range

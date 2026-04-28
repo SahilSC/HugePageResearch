@@ -1,5 +1,6 @@
 import subprocess
 from dataclasses import dataclass, field
+from pathlib import Path
 from random import shuffle
 from typing import Literal, cast
 
@@ -75,7 +76,12 @@ class LinnosBenchmark(Benchmark):
                 stdout=subprocess.DEVNULL,
             )
 
-    def run(self) -> None:
+    def run(
+        self,
+        *,
+        run_dir: Path | None = None,
+        config_text: str | None = None,
+    ) -> None:
         if self.process is not None:
             raise BenchmarkRunningError()
         traces = [

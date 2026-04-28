@@ -74,7 +74,8 @@ def cli_collect_data(
     clean: bool,
 ):
     """Run data collection tooling."""
-    config_overrides = yaml.safe_load(config_file.read_text())
+    config_text = config_file.read_text(encoding="utf-8")
+    config_overrides = yaml.safe_load(config_text)
     config = KernmlopsConfig().merge(config_overrides)
     name = (
         benchmark_name
@@ -88,6 +89,7 @@ def cli_collect_data(
         verbose=verbose,
         collection_prefix=collection_prefix,
         clean=clean,
+        config_text=config_text,
     )
 
 
