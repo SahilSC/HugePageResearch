@@ -112,6 +112,5 @@
 - For Redis THP experiment work, start with `config/redis_thp_harness_v1.yaml`, `config/redis_vaptr_e2e.yaml`, `redis-module/vaptr.c`, and `python/kernmlops/data_collection/bpf_instrumentation/thp_intervention_hook.py`.
 - For kernel syscall work, start with `external/linux/ubuntu-6.8.0-101.101/`, `tests/syscall_verification/README.md`, and the checkpoint reports in `reports/kernel/`.
 - For collector/VAPTR debugging history, check `reports/collector/` before creating new scratch notes.
-- Keep durable reports in `reports/` and keep detailed rolling state in `RESEARCH.md`; avoid adding new root-level scratch markdown unless the user explicitly wants it there.
 
 # How to Start

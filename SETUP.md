@@ -148,53 +148,6 @@ sudo -E HOME=$HOME UNAME=$USER GID=$(id -g) PATH="$PATH" \
 Repeat that command with `config/redis_always_compat.yaml` and then optionally
 `config/redis_madvise_compat.yaml`.
 
-### 2.3 Compare The Runs
-
-From the repo root, replace the two example collection ids and run:
-
-```bash
-.venv/bin/python - <<'PY'
-import os
-import sys
-
-import polars as pl
-
-sys.path.insert(0, os.path.abspath("python/kernmlops"))
-from analysis.bloat import clean_rss_pid
-
-run_never = "REPLACE_WITH_NEVER_COLLECTION_ID"
-run_always = "REPLACE_WITH_ALWAYS_COLLECTION_ID"
-
-runs = {"never": run_never, "always": run_always}
-results = {}
-
-print("--- BLOAT ANALYSIS ---")
-for label, cid in runs.items():
-    base_dir = f"data/curated/redis/{cid}"
-    rss_df = pl.read_parquet(f"{base_dir}/mm_rss_stat.end.parquet")
-
-    tgid_counts = (
-        rss_df.filter(pl.col("tgid") > 0)
-        .group_by("tgid")
-        .len()
-        .sort("len", descending=True)
-    )
-    main_pid = tgid_counts[0, "tgid"]
-
-    timeline = clean_rss_pid(rss_df, main_pid)
-    avg_rss_mb = (timeline["count"] * 4 / 1024).mean()
-    print(f"{label} ({cid[:8]}...): Avg RSS = {avg_rss_mb:.2f} MB")
-    results[label] = avg_rss_mb
-
-bloat_mb = results["always"] - results["never"]
-bloat_pct = (bloat_mb / results["never"]) * 100
-print(f"Estimated Bloat: {bloat_mb:+.2f} MB ({bloat_pct:+.1f}%)")
-PY
-```
-
-The helper functions for this calculation live in
-`python/kernmlops/analysis/bloat.py`.
-
 ## 3. Redis Trace Capture And Replay
 
 Use this section when you want one preserved `snapshot.rdb`, one preserved
