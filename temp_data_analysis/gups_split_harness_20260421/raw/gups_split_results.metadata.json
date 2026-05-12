@@ -1,0 +1,18 @@
+{
+  "output": "temp_data_analysis/gups_split_harness_20260421/raw/gups_split_results.parquet",
+  "artifacts_dir": "temp_data_analysis/gups_split_harness_20260421/raw/gups_split_artifacts",
+  "breakpoints_path": "temp_data_analysis/gups_split_harness_20260421/raw/direct_breakpoints.parquet",
+  "benchmark_dir": "",
+  "binary_path": "/users/SahilSC/kernmlops-benchmark/gups/gups",
+  "table_size_gib": null,
+  "table_size_mib": 64,
+  "repeats": 4,
+  "updates_multiplier": 4,
+  "stream_seed": 7,
+  "runs": 3,
+  "collectors": [
+    "dtlb_loads",
+    "dtlb_misses"
+  ],
+  "commands_log_path": "temp_data_analysis/gups_split_harness_20260421/raw/gups_split_artifacts/run_commands.log"
+}

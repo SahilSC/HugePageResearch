@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import logging
 import os
@@ -19,24 +20,129 @@ if __package__ in {None, ""}:
         sys.path.insert(0, _PACKAGE_ROOT_STR)
 
 import polars as pl
-from kernmlops_benchmark.benchmark import GenericBenchmarkConfig
-from replay.hardware_collectors import HardwareCollector
-from replay.replay_trace import (
-    _load_counter_config,
-    _require_root_for_counter_collection,
-)
-from replay.system_tuning import _set_thp_enabled_mode, setup_system, teardown_system
 
 logger = logging.getLogger(__name__)
+
+_SYSTEM_TUNING_MODULE = None
+
+
+class _NoopHardwareCollector:
+    """Collector object used when the GUPS run is runtime-only."""
+
+    def start_counters(self, collectors: list[str], pid: int) -> None:
+        return None
+
+    def stop_counters(self, collectors: list[str]) -> dict[str, int]:
+        return {}
+
+    def close(self) -> None:
+        return None
+
+
+def _load_system_tuning_module():
+    """Load the sibling system_tuning module without importing replay.__init__."""
+    global _SYSTEM_TUNING_MODULE
+    if _SYSTEM_TUNING_MODULE is not None:
+        return _SYSTEM_TUNING_MODULE
+
+    module_path = Path(__file__).with_name("system_tuning.py")
+    spec = importlib.util.spec_from_file_location("gups_system_tuning", module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Could not load system tuning module from {module_path}.")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    _SYSTEM_TUNING_MODULE = module
+    return module
+
+
+def setup_system():
+    """Apply the shared replay system tuning for GUPS runs."""
+    return _load_system_tuning_module().setup_system()
+
+
+def teardown_system(system_config) -> None:
+    """Restore the shared replay system tuning after GUPS runs."""
+    _load_system_tuning_module().teardown_system(system_config)
+
+
+def _set_thp_enabled_mode(mode: str) -> None:
+    """Set THP mode via the shared replay system tuning helper."""
+    _load_system_tuning_module()._set_thp_enabled_mode(mode)
+
+
+def HardwareCollector():
+    """Construct the replay hardware collector only when counters are enabled."""
+    from replay.hardware_collectors import HardwareCollector as _HardwareCollector
+
+    return _HardwareCollector()
+
+
+def _require_root_for_counter_collection(counter_names: tuple[str, ...]) -> None:
+    """Fail fast when replay counters are requested without root privileges."""
+    if counter_names and os.geteuid() != 0:
+        counters = ", ".join(counter_names)
+        raise PermissionError(
+            f"Replay collectors [{counters}] require sudo/root because the "
+            "replay counters use direct perf_event counters on the host."
+        )
+
+
+def _load_counter_config(config_path: Path | None) -> tuple[str, ...]:
+    """Load optional GUPS replay counter names from a YAML collector config."""
+    if config_path is None:
+        return ()
+
+    import yaml
+
+    raw_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    if raw_config is None:
+        return ()
+    if not isinstance(raw_config, dict):
+        raise RuntimeError(
+            "Replay collector config must be a YAML mapping with a "
+            "'collectors' list."
+        )
+
+    raw_collectors = raw_config.get("collectors", [])
+    if not isinstance(raw_collectors, list) or any(
+        not isinstance(counter_name, str) for counter_name in raw_collectors
+    ):
+        raise RuntimeError(
+            "Replay collector config must define 'collectors' as a list of "
+            "counter names."
+        )
+
+    supported = set(HardwareCollector().supported_counter_names())
+    normalized_collectors: list[str] = []
+    seen: set[str] = set()
+    for raw_counter_name in raw_collectors:
+        counter_name = raw_counter_name.strip()
+        if not counter_name:
+            raise RuntimeError(
+                "Replay collector config cannot include empty counter names."
+            )
+        if counter_name not in supported:
+            supported_text = ", ".join(sorted(supported))
+            raise RuntimeError(
+                f"Unsupported replay counter {counter_name!r}. Supported "
+                f"counters: {supported_text}."
+            )
+        if counter_name in seen:
+            continue
+        normalized_collectors.append(counter_name)
+        seen.add(counter_name)
+    return tuple(normalized_collectors)
 
 
 def _resolve_gups_binary(benchmark_dir: Path | None) -> Path:
     """Resolve the installed repo-managed GUPS benchmark binary."""
-    root = (
-        benchmark_dir
-        if benchmark_dir is not None
-        else GenericBenchmarkConfig().get_benchmark_dir()
-    )
+    if benchmark_dir is not None:
+        root = benchmark_dir
+    else:
+        from kernmlops_benchmark.benchmark import GenericBenchmarkConfig
+
+        root = GenericBenchmarkConfig().get_benchmark_dir()
     binary_path = root / "gups" / "gups"
     if not binary_path.is_file():
         raise RuntimeError(
@@ -59,11 +165,6 @@ def _build_size_args(
     if table_size_gib is not None:
         return ["--table-size-gib", str(table_size_gib)]
     return ["--table-size-mib", str(table_size_mib)]
-
-
-def _page_columns(row: dict[str, object]) -> list[str]:
-    """Return all breakpoint matrix columns that encode selected pages."""
-    return sorted(column for column in row if column.startswith("hp_"))
 
 
 def _target_page_indices(row: dict[str, object]) -> list[int]:
@@ -116,7 +217,7 @@ def _write_pre_split_pages(
 ) -> Path | None:
     """Write one pre-timed page list for a split row."""
     row_kind = str(row.get("row_kind", ""))
-    if row_kind not in {"split_only", "split_multi"}:
+    if row_kind not in {"split_only", "split_multi", "split_chunk"}:
         return None
 
     target_page_indices = _target_page_indices(row)
@@ -289,7 +390,7 @@ def run_benchmark(
         table_size_gib=table_size_gib,
         table_size_mib=table_size_mib,
     )
-    hw_collector = HardwareCollector()
+    hw_collector = HardwareCollector() if collectors else _NoopHardwareCollector()
     commands_log_path = artifacts_dir / "run_commands.log"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
     results: list[dict[str, object]] = []

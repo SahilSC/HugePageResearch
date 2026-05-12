@@ -242,6 +242,18 @@ generator, but the split trigger is page-local rather than key-local.
 - this keeps the timed region on the fast update loop rather than the
   per-access inline split-schedule loop
 
+`split_chunk` rows:
+
+- runner sets THP `enabled` to `always`
+- when run with `--split-mode pre_split`, runner writes `pre_split_pages.csv`
+  before each invocation
+- each row contains an explicit 1-indexed rank slice from the calibration
+  ranking, such as `hot pages 1 to 10` or `least hot pages 1 to 10`
+- hot chunks use descending `update_count` order
+- least-hot chunks use the tail of the same nonzero-touch ranking
+- the renderer shows expected successes as `target_page_count * runs`, for
+  example `(30/30) hot pages 1 to 10` when ten pages split across three runs
+
 ### GUPS Calibration
 
 Install the benchmark on the host first:
@@ -303,6 +315,30 @@ For cumulative multi-page experiments, add:
 
 That emits `base_pages`, `no_break`, then cumulative `hot 2 pages` through
 `hot 10 pages` and `random 2 pages` through `random 10 pages`.
+
+For sparse cumulative counts, use:
+
+```bash
+  --multi-page-count-list 10,100,1000 \
+  --multi-page-groups hot
+```
+
+That emits only `base_pages`, `no_break`, `hot 10 pages`, `hot 100 pages`, and
+`hot 1000 pages`. Use this form when you want a small count-curve experiment
+instead of one row for every count in a range.
+
+For explicit 10-page rank chunks, use:
+
+```bash
+  --hot-page-chunks 1:10,11:20,21:30 \
+  --least-hot-page-chunks 1:10
+```
+
+That emits `base_pages`, `no_break`, then `hot pages 1 to 10`,
+`hot pages 11 to 20`, `hot pages 21 to 30`, and
+`least hot pages 1 to 10`. Chunk rows are `split_chunk` rows, so run them with
+`--split-mode pre_split` when the goal is steady-state runtime after the
+selected pages have already been split.
 
 ### Run The GUPS Matrix In `tmux`
 
@@ -367,6 +403,10 @@ The renderer writes:
 The HTML and `config.md` both preserve the exact input paths, command-log path,
 and any split-only rows that were omitted from the main charts because they
 never successfully split.
+
+Chunk-only runs do not render broken-page-count curves, because every chunk row
+has the same selected page count and the curve would not represent a count
+sweep.
 
 ## Replay CLI Notes
 

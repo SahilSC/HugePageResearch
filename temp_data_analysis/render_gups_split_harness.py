@@ -26,7 +26,7 @@ class RowSummary:
         target_page_count: Number of pages selected by this row.
         split_success_total: Total successful splits across all runs.
         split_expected_successes: Expected successes for pre-split multi-page
-            rows, computed as ``target_page_count * runs``.
+            and chunk rows, computed as ``target_page_count * runs``.
         split_max_attempts_max: Maximum retry count seen across all runs.
         runtime_mean: Mean per-run runtime across matrix reruns.
         runtime_std: Sample standard deviation of per-run runtime.
@@ -218,9 +218,10 @@ def load_row_summaries(results_path: Path) -> list[RowSummary]:
         split_success_total = sum(int(row[column]) for column in split_success_columns)
         target_page_count = int(row.get("target_page_count") or 0)
         page_group = str(row.get("page_group") or "")
+        expected_success_kinds = {"split_multi", "split_chunk"}
         split_expected_successes = (
             target_page_count * len(split_success_columns)
-            if row_kind == "split_multi"
+            if row_kind in expected_success_kinds
             else 0
         )
         split_max_attempts_max = max(
@@ -228,9 +229,10 @@ def load_row_summaries(results_path: Path) -> list[RowSummary]:
             default=0,
         )
         include_in_main_charts = (
-            row_kind not in {"split_only", "split_multi"} or split_success_total > 0
+            row_kind not in {"split_only", "split_multi", "split_chunk"}
+            or split_success_total > 0
         )
-        if row_kind == "split_multi":
+        if row_kind in expected_success_kinds:
             display_label = (
                 f"({split_success_total}/{split_expected_successes}) {row_label}"
             )
@@ -374,7 +376,7 @@ def _render_config_markdown(
         "- baseline row: `base_pages`",
         "- baseline meaning: `THP never` with no page breaks",
         "- `no_break` meaning: `THP always` with no page breaks",
-        "- split-only meaning: `THP always` with selected page breaks",
+        "- split-row meaning: `THP always` with selected page breaks",
         "- runtime percent formula: `100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)`",
         "- speedup percent formula: `100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)`",
         "",
@@ -507,7 +509,7 @@ def _render_html(
                 "<ul>",
                 "<li><code>base_pages</code> means THP never with no page breaks.</li>",
                 "<li><code>no_break</code> means THP always with no page breaks.</li>",
-                "<li>Split-only rows mean THP always with selected page breaks.</li>",
+                "<li>Split rows mean THP always with selected page breaks.</li>",
                 "<li>The normalization baseline is always <code>base_pages</code>.</li>",
                 "<li>Runtime percent formula: <code>100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)</code></li>",
                 "<li>Speedup percent formula: <code>100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)</code></li>",

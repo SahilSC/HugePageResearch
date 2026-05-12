@@ -1,0 +1,6 @@
+repeat_index,page_index,break_after_page_accesses,label
+0,4095,1,hot page #2
+1,4095,1,hot page #2
+2,4095,1,hot page #2
+3,4095,1,hot page #2
+4,4095,1,hot page #2

@@ -1,0 +1,125 @@
+{
+  "label": "gups_chunked_10pages_20260501T012721Z",
+  "target_base_runtime_s": 60.0,
+  "pilot_results": [
+    {
+      "size_gib": 2.0,
+      "updates_multiplier": 4.0,
+      "runtime_s": 44.244459062
+    },
+    {
+      "size_gib": 2.0,
+      "updates_multiplier": 5.0,
+      "runtime_s": 57.473675882
+    },
+    {
+      "size_gib": 2.0,
+      "updates_multiplier": 6.0,
+      "runtime_s": 65.439046082
+    }
+  ],
+  "chosen": {
+    "size_gib": 2.0,
+    "updates_multiplier": 5.0,
+    "runtime_s": 57.473675882
+  },
+  "chosen_size_gib": 2,
+  "chosen_updates_multiplier": 5,
+  "calibration": {
+    "command": "/users/SahilSC/kernmlops-benchmark/gups/gups --results /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/calibration_results.jsonl --table-size-gib 2 --repeats 1 --updates-multiplier 5 --threads 1 --stream-seed 7 --page-summary-out /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/calibration_page_summary.csv",
+    "results_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/calibration_results.jsonl",
+    "page_summary_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/calibration_page_summary.csv",
+    "stdout_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/calibration_stdout.log"
+  },
+  "breakpoints_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/breakpoints.parquet",
+  "results_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/gups_split_results.parquet",
+  "metadata_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/gups_split_results.metadata.json",
+  "dashboard_dir": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z",
+  "dashboard_outputs": {
+    "runtime_png": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/runtime_mean_std.png",
+    "runtime_pct_png": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/runtime_pct_vs_base_pages.png",
+    "speedup_pct_png": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/speedup_pct_vs_base_pages.png",
+    "gups_png": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/gups_mean_std.png",
+    "dtlb_loads_png": ".",
+    "dtlb_misses_png": ".",
+    "config_md": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/config.md",
+    "html": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/gups_split_harness_gups_chunked_10pages_20260501T012721Z.html",
+    "count_curve_pngs": []
+  },
+  "commands_log_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/gups_split_artifacts/run_commands.log",
+  "final_rows": [
+    {
+      "row_label": "base_pages",
+      "row_kind": "base_pages",
+      "target_page_count": 0,
+      "runtime_s_values": [
+        55.327970234,
+        56.79399465,
+        56.35941683
+      ],
+      "runtime_s_mean": 56.16046057133334,
+      "split_successes_total": 0
+    },
+    {
+      "row_label": "no_break",
+      "row_kind": "no_break",
+      "target_page_count": 0,
+      "runtime_s_values": [
+        16.938522109,
+        16.807885371,
+        16.972308653
+      ],
+      "runtime_s_mean": 16.906238711,
+      "split_successes_total": 0
+    },
+    {
+      "row_label": "hot pages 1 to 10",
+      "row_kind": "split_chunk",
+      "target_page_count": 10,
+      "runtime_s_values": [
+        17.16889245,
+        17.283562403,
+        17.146711188
+      ],
+      "runtime_s_mean": 17.19972201366667,
+      "split_successes_total": 30
+    },
+    {
+      "row_label": "hot pages 11 to 20",
+      "row_kind": "split_chunk",
+      "target_page_count": 10,
+      "runtime_s_values": [
+        17.169803019,
+        17.20306216,
+        17.203775257
+      ],
+      "runtime_s_mean": 17.19221347866667,
+      "split_successes_total": 30
+    },
+    {
+      "row_label": "hot pages 21 to 30",
+      "row_kind": "split_chunk",
+      "target_page_count": 10,
+      "runtime_s_values": [
+        17.239937327,
+        17.147880856,
+        17.210143518
+      ],
+      "runtime_s_mean": 17.199320567,
+      "split_successes_total": 30
+    },
+    {
+      "row_label": "least hot pages 1 to 10",
+      "row_kind": "split_chunk",
+      "target_page_count": 10,
+      "runtime_s_values": [
+        17.242430787,
+        17.176705893,
+        17.320919373
+      ],
+      "runtime_s_mean": 17.246685351,
+      "split_successes_total": 30
+    }
+  ],
+  "total_wall_s": 1262.4304665420204
+}

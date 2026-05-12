@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset='utf-8'><title>GUPS Split Harness</title></head><body>
+<h1>GUPS Split Harness: partial_preview</h1>
+<h2>Inputs</h2>
+<ul>
+<li>Results parquet: temp_data_analysis/gups_split_harness_8gib_10hot_3random_20260422/raw/gups_split_results.parquet</li>
+<li>Breakpoints parquet: temp_data_analysis/gups_split_harness_8gib_10hot_3random_20260422/raw/breakpoints.parquet</li>
+<li>Commands log: temp_data_analysis/gups_split_harness_8gib_10hot_3random_20260422/raw/gups_split_artifacts/run_commands.log</li>
+<li>Artifacts dir: temp_data_analysis/gups_split_harness_8gib_10hot_3random_20260422/raw/gups_split_artifacts</li>
+</ul>
+<h2>Row Meanings</h2>
+<ul>
+<li><code>base_pages</code> means THP never with no page breaks.</li>
+<li><code>no_break</code> means THP always with no page breaks.</li>
+<li>Split-only rows mean THP always with selected page breaks.</li>
+<li>The normalization baseline is always <code>base_pages</code>.</li>
+<li>Runtime percent formula: <code>100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)</code></li>
+<li>Speedup percent formula: <code>100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)</code></li>
+</ul>
+<h2>Main Graphs</h2>
+<img src="runtime_mean_std.png" alt="runtime graph" style="max-width: 100%;">
+<img src="runtime_pct_vs_base_pages.png" alt="runtime percent change graph" style="max-width: 100%;">
+<img src="speedup_pct_vs_base_pages.png" alt="speedup percent graph" style="max-width: 100%;">
+<img src="gups_mean_std.png" alt="gups graph" style="max-width: 100%;">
+<img src="dtlb_loads_mean_std.png" alt="dtlb loads graph" style="max-width: 100%;">
+<img src="dtlb_misses_mean_std.png" alt="dtlb misses graph" style="max-width: 100%;">
+<h2>Row Summary</h2>
+<table border='1' cellspacing='0' cellpadding='4'>
+<tr><th>Row</th><th>Runtime</th><th>Runtime % vs base_pages</th><th>Speedup % vs base_pages</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Max split attempts</th></tr>
+<tr><td>base_pages</td><td>305.690144 +/- 1.179614</td><td>0.000 +/- 0.000</td><td>0.000 +/- 0.000</td><td>0.014050 +/- 0.000054</td><td>97125188684.667 +/- 17180991.823</td><td>63025818124.000 +/- 75587166.414</td><td>0</td><td>0</td></tr>
+<tr><td>no_break</td><td>67.743446 +/- 0.084546</td><td>-77.839 +/- 0.112</td><td>351.249 +/- 2.278</td><td>0.063401 +/- 0.000079</td><td>89935420405.667 +/- 91309098.684</td><td>25406863394.667 +/- 9148234.946</td><td>0</td><td>0</td></tr>
+<tr><td>(3) hot page #1</td><td>184.578824 +/- 0.709641</td><td>-39.618 +/- 0.323</td><td>65.617 +/- 0.887</td><td>0.023273 +/- 0.000089</td><td>584903893776.333 +/- 86202078.544</td><td>24527489675.000 +/- 26559629.819</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #2</td><td>184.924318 +/- 0.846862</td><td>-39.505 +/- 0.507</td><td>65.310 +/- 1.380</td><td>0.023230 +/- 0.000106</td><td>584851551421.000 +/- 14661084.191</td><td>24507766669.667 +/- 24719459.176</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #3</td><td>184.911701 +/- 0.542261</td><td>-39.509 +/- 0.351</td><td>65.318 +/- 0.959</td><td>0.023232 +/- 0.000068</td><td>584852337182.000 +/- 8358353.701</td><td>24502907974.667 +/- 42732968.543</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #4</td><td>184.633131 +/- 0.904110</td><td>-39.601 +/- 0.183</td><td>65.567 +/- 0.502</td><td>0.023267 +/- 0.000114</td><td>584846793127.333 +/- 13501764.466</td><td>24520515363.000 +/- 48281954.628</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #5</td><td>184.058398 +/- 0.507516</td><td>-39.789 +/- 0.146</td><td>66.083 +/- 0.404</td><td>0.023340 +/- 0.000064</td><td>584839866680.333 +/- 7920987.501</td><td>24531535146.333 +/- 29532300.158</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #6</td><td>184.645681 +/- 0.470423</td><td>-39.596 +/- 0.357</td><td>65.556 +/- 0.977</td><td>0.023265 +/- 0.000059</td><td>584842893524.667 +/- 5355802.322</td><td>24504709585.333 +/- 38192745.943</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #7</td><td>184.406369 +/- 0.542936</td><td>-39.675 +/- 0.354</td><td>65.771 +/- 0.971</td><td>0.023296 +/- 0.000069</td><td>584845830419.667 +/- 5772152.513</td><td>24558547578.000 +/- 11431943.049</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #8</td><td>185.355231 +/- 0.201875</td><td>-39.364 +/- 0.202</td><td>64.921 +/- 0.549</td><td>0.023176 +/- 0.000025</td><td>584851719509.333 +/- 3719741.812</td><td>24483136510.000 +/- 37868880.048</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #9</td><td>184.748710 +/- 0.285395</td><td>-39.563 +/- 0.252</td><td>65.463 +/- 0.691</td><td>0.023252 +/- 0.000036</td><td>584843767949.667 +/- 3705382.080</td><td>24497649535.000 +/- 6942000.036</td><td>3</td><td>2</td></tr>
+<tr><td>(3) hot page #10</td><td>185.823385 +/- 0.969341</td><td>-39.212 +/- 0.261</td><td>64.507 +/- 0.707</td><td>0.023118 +/- 0.000121</td><td>584863689259.333 +/- 9356603.516</td><td>24509095536.667 +/- 31763238.904</td><td>3</td><td>2</td></tr>
+<tr><td>(3) random page #1</td><td>184.603044 +/- 0.975351</td><td>-39.610 +/- 0.543</td><td>65.598 +/- 1.483</td><td>0.023271 +/- 0.000123</td><td>584845471319.000 +/- 5117980.803</td><td>24535434430.000 +/- 9431535.222</td><td>3</td><td>2</td></tr>
+<tr><td>(3) random page #2</td><td>184.039609 +/- 0.886489</td><td>-39.795 +/- 0.326</td><td>66.102 +/- 0.903</td><td>0.023342 +/- 0.000112</td><td>585004627487.000 +/- 136667064.804</td><td>24541992099.333 +/- 62180284.655</td><td>3</td><td>2</td></tr>
+</table>
+<h2>Omitted Split-Only Rows</h2>
+<ul><li>none</li></ul>
+</body></html>

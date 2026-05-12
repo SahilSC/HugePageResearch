@@ -76,6 +76,11 @@ perl -0pi -e 's/include-system-site-packages = false/include-system-site-package
 .venv/bin/python -c "import bcc, polars, osquery; print('python deps ok')"
 ```
 
+### 1.4.1 Bootstrap `.venv` In This Checkout If It Is Missing
+
+1. `cd ~/HugePageResearch-gups-harness`
+2. `uv run python -c "import polars, matplotlib, redis"`
+
 ### 1.5 Fix The Benchmark Path On Non-Standard Home Directories
 
 The benchmark installers and some scripts still expect
@@ -94,6 +99,33 @@ fi
 gh auth login
 gh auth status
 ```
+
+### 1.7 Optional LaTeX Editing In VS Code
+
+1. Update package indexes on the host:
+
+   ```bash
+   sudo apt-get update
+   ```
+
+2. Install the LaTeX build tools and common TeX packages:
+
+   ```bash
+   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+     latexmk \
+     texlive-latex-extra \
+     texlive-fonts-recommended \
+     texlive-bibtex-extra \
+     texlive-xetex \
+     biber \
+     chktex
+   ```
+
+3. Install the VS Code extension:
+
+   ```bash
+   code --install-extension James-Yu.latex-workshop
+   ```
 
 ## 2. Memory Bloat And Trace-Data Collection
 

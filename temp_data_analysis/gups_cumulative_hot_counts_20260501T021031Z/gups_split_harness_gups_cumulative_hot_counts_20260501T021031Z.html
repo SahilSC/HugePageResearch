@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset='utf-8'><title>GUPS Split Harness</title></head><body>
+<h1>GUPS Split Harness: gups_cumulative_hot_counts_20260501T021031Z</h1>
+<h2>Inputs</h2>
+<ul>
+<li>Results parquet: temp_data_analysis/gups_cumulative_hot_counts_20260501T021031Z/raw/gups_split_results.parquet</li>
+<li>Breakpoints parquet: temp_data_analysis/gups_cumulative_hot_counts_20260501T021031Z/raw/breakpoints.parquet</li>
+<li>Commands log: temp_data_analysis/gups_cumulative_hot_counts_20260501T021031Z/raw/gups_split_artifacts/run_commands.log</li>
+<li>Artifacts dir: temp_data_analysis/gups_cumulative_hot_counts_20260501T021031Z/raw/gups_split_artifacts</li>
+</ul>
+<h2>Row Meanings</h2>
+<ul>
+<li><code>base_pages</code> means THP never with no page breaks.</li>
+<li><code>no_break</code> means THP always with no page breaks.</li>
+<li>Split rows mean THP always with selected page breaks.</li>
+<li>The normalization baseline is always <code>base_pages</code>.</li>
+<li>Runtime percent formula: <code>100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)</code></li>
+<li>Speedup percent formula: <code>100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)</code></li>
+</ul>
+<h2>Main Graphs</h2>
+<img src="runtime_mean_std.png" alt="runtime graph" style="max-width: 100%;">
+<img src="runtime_pct_vs_base_pages.png" alt="runtime percent change graph" style="max-width: 100%;">
+<img src="speedup_pct_vs_base_pages.png" alt="speedup percent graph" style="max-width: 100%;">
+<img src="gups_mean_std.png" alt="gups graph" style="max-width: 100%;">
+<h2>Broken Page Count Curves</h2>
+<img src="runtime_by_broken_page_count.png" alt="runtime_by_broken_page_count" style="max-width: 100%;">
+<img src="runtime_pct_vs_base_pages_by_broken_page_count.png" alt="runtime_pct_vs_base_pages_by_broken_page_count" style="max-width: 100%;">
+<img src="speedup_pct_vs_base_pages_by_broken_page_count.png" alt="speedup_pct_vs_base_pages_by_broken_page_count" style="max-width: 100%;">
+<img src="gups_by_broken_page_count.png" alt="gups_by_broken_page_count" style="max-width: 100%;">
+<h2>Row Summary</h2>
+<table border='1' cellspacing='0' cellpadding='4'>
+<tr><th>Row</th><th>Runtime</th><th>Runtime % vs base_pages</th><th>Speedup % vs base_pages</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Expected successes</th><th>Max split attempts</th></tr>
+<tr><td>base_pages</td><td>56.605811 +/- 0.458547</td><td>0.000 +/- 0.000</td><td>0.000 +/- 0.000</td><td>0.023712 +/- 0.000193</td><td></td><td></td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>no_break</td><td>16.904142 +/- 0.048343</td><td>-70.135 +/- 0.327</td><td>234.870 +/- 3.658</td><td>0.079400 +/- 0.000227</td><td></td><td></td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>(30/30) hot 10 pages</td><td>17.183944 +/- 0.038307</td><td>-69.641 +/- 0.261</td><td>229.412 +/- 2.820</td><td>0.078107 +/- 0.000174</td><td></td><td></td><td>30</td><td>30</td><td>1</td></tr>
+<tr><td>(300/300) hot 100 pages</td><td>19.849346 +/- 0.014339</td><td>-64.932 +/- 0.302</td><td>185.178 +/- 2.448</td><td>0.067618 +/- 0.000049</td><td></td><td></td><td>300</td><td>300</td><td>1</td></tr>
+<tr><td>(3000/3000) hot 1000 pages</td><td>54.787442 +/- 0.959688</td><td>-3.217 +/- 0.926</td><td>3.330 +/- 0.987</td><td>0.024503 +/- 0.000430</td><td></td><td></td><td>3000</td><td>3000</td><td>1</td></tr>
+</table>
+<h2>Omitted Split-Only Rows</h2>
+<ul><li>none</li></ul>
+</body></html>

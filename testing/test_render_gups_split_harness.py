@@ -232,6 +232,52 @@ class RenderGUPSSplitHarnessTest(unittest.TestCase):
         self.assertEqual(summaries[1].page_group, "hot")
         self.assertFalse(summaries[2].include_in_main_charts)
 
+    def test_load_row_summaries_labels_chunk_expected_successes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            results_path = Path(tmpdir) / "results.parquet"
+            pl.DataFrame(
+                [
+                    {
+                        "row_kind": "base_pages",
+                        "row_label": "base_pages",
+                        "target_page_count": 0,
+                        "page_group": "",
+                        "runtime_s_1": 1.0,
+                        "runtime_s_2": 1.2,
+                        "gups_1": 2.0,
+                        "gups_2": 1.8,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 0,
+                        "split_max_attempts_2": 0,
+                    },
+                    {
+                        "row_kind": "split_chunk",
+                        "row_label": "hot pages 1 to 10",
+                        "target_page_count": 10,
+                        "page_group": "hot",
+                        "runtime_s_1": 0.8,
+                        "runtime_s_2": 0.9,
+                        "gups_1": 2.5,
+                        "gups_2": 2.4,
+                        "split_successes_1": 10,
+                        "split_successes_2": 10,
+                        "split_max_attempts_1": 1,
+                        "split_max_attempts_2": 1,
+                    },
+                ]
+            ).write_parquet(results_path)
+
+            summaries = RENDER.load_row_summaries(results_path)
+
+        self.assertEqual(
+            summaries[1].display_label,
+            "(20/20) hot pages 1 to 10",
+        )
+        self.assertEqual(summaries[1].split_expected_successes, 20)
+        self.assertTrue(summaries[1].include_in_main_charts)
+        self.assertEqual(RENDER._multi_page_summaries(summaries), [])
+
     def test_render_dashboard_writes_html_pngs_and_config(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
@@ -326,6 +372,63 @@ class RenderGUPSSplitHarnessTest(unittest.TestCase):
             self.assertIn("The normalization baseline is always <code>base_pages</code>.", html_text)
             self.assertIn("Runtime % vs base_pages", html_text)
             self.assertIn("Speedup % vs base_pages", html_text)
+
+    def test_render_dashboard_skips_count_curves_for_chunk_only_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            results_path = base / "results.parquet"
+            metadata_path = base / "results.metadata.json"
+            output_dir = base / "dashboard"
+
+            pl.DataFrame(
+                [
+                    {
+                        "row_kind": "base_pages",
+                        "row_label": "base_pages",
+                        "target_page_count": 0,
+                        "page_group": "",
+                        "runtime_s_1": 1.0,
+                        "runtime_s_2": 1.2,
+                        "gups_1": 2.0,
+                        "gups_2": 1.8,
+                        "split_successes_1": 0,
+                        "split_successes_2": 0,
+                        "split_max_attempts_1": 0,
+                        "split_max_attempts_2": 0,
+                    },
+                    {
+                        "row_kind": "split_chunk",
+                        "row_label": "hot pages 1 to 10",
+                        "target_page_count": 10,
+                        "page_group": "hot",
+                        "runtime_s_1": 0.8,
+                        "runtime_s_2": 0.9,
+                        "gups_1": 2.5,
+                        "gups_2": 2.4,
+                        "split_successes_1": 10,
+                        "split_successes_2": 10,
+                        "split_max_attempts_1": 1,
+                        "split_max_attempts_2": 1,
+                    },
+                ]
+            ).write_parquet(results_path)
+
+            metadata_path.write_text(
+                json.dumps({"output": str(results_path), "split_mode": "pre_split"}),
+                encoding="utf-8",
+            )
+
+            outputs = RENDER.render_dashboard(
+                results_path=results_path,
+                metadata_path=metadata_path,
+                output_dir=output_dir,
+                label="chunk",
+            )
+
+            self.assertEqual(outputs["count_curve_pngs"], [])
+            self.assertFalse((output_dir / "runtime_by_broken_page_count.png").exists())
+            html_text = outputs["html"].read_text(encoding="utf-8")
+            self.assertIn("(20/20) hot pages 1 to 10", html_text)
 
     def test_render_dashboard_writes_multi_page_count_curves(self):
         with tempfile.TemporaryDirectory() as tmpdir:

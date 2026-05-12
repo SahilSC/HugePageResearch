@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import tempfile
@@ -12,8 +13,15 @@ import polars as pl
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "python" / "kernmlops"))
+MODULE_PATH = ROOT / "python" / "kernmlops" / "replay" / "replay_gups.py"
 
-from replay import replay_gups
+SPEC = importlib.util.spec_from_file_location("replay_gups", MODULE_PATH)
+if SPEC is None or SPEC.loader is None:
+    raise RuntimeError("Could not load replay_gups.py for testing")
+
+replay_gups = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = replay_gups
+SPEC.loader.exec_module(replay_gups)
 
 
 class ReplayGUPSTest(unittest.TestCase):
@@ -31,6 +39,26 @@ class ReplayGUPSTest(unittest.TestCase):
                     schedule_path=schedule_path,
                 )
             )
+
+    def test_write_pre_split_pages_accepts_split_chunk_rows(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pre_split_path = Path(tmpdir) / "pre_split_pages.csv"
+
+            written_path = replay_gups._write_pre_split_pages(
+                {
+                    "row_kind": "split_chunk",
+                    "row_label": "hot pages 1 to 10",
+                    "target_page_index": -1,
+                    "target_page_indices": "7,9",
+                },
+                pre_split_pages_path=pre_split_path,
+            )
+
+            self.assertEqual(written_path, pre_split_path)
+            pre_split_text = pre_split_path.read_text(encoding="utf-8")
+            self.assertIn("page_index,label", pre_split_text)
+            self.assertIn("7,hot pages 1 to 10", pre_split_text)
+            self.assertIn("9,hot pages 1 to 10", pre_split_text)
 
     def test_run_benchmark_uses_base_pages_no_break_and_split_rows(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1,0 +1,16 @@
+{
+  "output": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_20260428T183301Z/raw/gups_split_results.parquet",
+  "artifacts_dir": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_20260428T183301Z/raw/gups_split_artifacts",
+  "breakpoints_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_20260428T183301Z/raw/breakpoints.parquet",
+  "benchmark_dir": "",
+  "binary_path": "/users/SahilSC/kernmlops-benchmark/gups/gups",
+  "table_size_gib": 1,
+  "table_size_mib": null,
+  "repeats": 1,
+  "updates_multiplier": 4,
+  "stream_seed": 7,
+  "runs": 1,
+  "split_mode": "pre_split",
+  "collectors": [],
+  "commands_log_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_20260428T183301Z/raw/gups_split_artifacts/run_commands.log"
+}

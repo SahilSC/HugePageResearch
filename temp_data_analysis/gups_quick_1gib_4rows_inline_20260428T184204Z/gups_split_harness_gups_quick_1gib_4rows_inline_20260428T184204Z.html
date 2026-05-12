@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset='utf-8'><title>GUPS Split Harness</title></head><body>
+<h1>GUPS Split Harness: gups_quick_1gib_4rows_inline_20260428T184204Z</h1>
+<h2>Inputs</h2>
+<ul>
+<li>Results parquet: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_inline_20260428T184204Z/raw/gups_split_results.parquet</li>
+<li>Breakpoints parquet: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_inline_20260428T184204Z/raw/breakpoints.parquet</li>
+<li>Commands log: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_inline_20260428T184204Z/raw/gups_split_artifacts/run_commands.log</li>
+<li>Artifacts dir: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_quick_1gib_4rows_inline_20260428T184204Z/raw/gups_split_artifacts</li>
+</ul>
+<h2>Row Meanings</h2>
+<ul>
+<li><code>base_pages</code> means THP never with no page breaks.</li>
+<li><code>no_break</code> means THP always with no page breaks.</li>
+<li>Split-only rows mean THP always with selected page breaks.</li>
+<li>The normalization baseline is always <code>base_pages</code>.</li>
+<li>Runtime percent formula: <code>100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)</code></li>
+<li>Speedup percent formula: <code>100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)</code></li>
+</ul>
+<h2>Main Graphs</h2>
+<img src="runtime_mean_std.png" alt="runtime graph" style="max-width: 100%;">
+<img src="runtime_pct_vs_base_pages.png" alt="runtime percent change graph" style="max-width: 100%;">
+<img src="speedup_pct_vs_base_pages.png" alt="speedup percent graph" style="max-width: 100%;">
+<img src="gups_mean_std.png" alt="gups graph" style="max-width: 100%;">
+<h2>Broken Page Count Curves</h2>
+<p>No successful multi-page split rows found.</p>
+<h2>Row Summary</h2>
+<table border='1' cellspacing='0' cellpadding='4'>
+<tr><th>Row</th><th>Runtime</th><th>Runtime % vs base_pages</th><th>Speedup % vs base_pages</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Expected successes</th><th>Max split attempts</th></tr>
+<tr><td>base_pages</td><td>18.387922 +/- 0.000000</td><td>0.000 +/- 0.000</td><td>0.000 +/- 0.000</td><td>0.029197 +/- 0.000000</td><td></td><td></td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>no_break</td><td>6.762669 +/- 0.000000</td><td>-63.222 +/- 0.000</td><td>171.903 +/- 0.000</td><td>0.079387 +/- 0.000000</td><td></td><td></td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>(1) hot page #1</td><td>15.311311 +/- 0.000000</td><td>-16.732 +/- 0.000</td><td>20.094 +/- 0.000</td><td>0.035064 +/- 0.000000</td><td></td><td></td><td>1</td><td>0</td><td>1</td></tr>
+<tr><td>(1) hot page #2</td><td>14.973594 +/- 0.000000</td><td>-18.568 +/- 0.000</td><td>22.802 +/- 0.000</td><td>0.035855 +/- 0.000000</td><td></td><td></td><td>1</td><td>0</td><td>1</td></tr>
+</table>
+<h2>Omitted Split-Only Rows</h2>
+<ul><li>none</li></ul>
+</body></html>

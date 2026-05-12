@@ -1,0 +1,39 @@
+<!doctype html>
+<html><head><meta charset='utf-8'><title>GUPS Split Harness</title></head><body>
+<h1>GUPS Split Harness: gups_chunked_10pages_20260501T012721Z</h1>
+<h2>Inputs</h2>
+<ul>
+<li>Results parquet: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/gups_split_results.parquet</li>
+<li>Breakpoints parquet: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/breakpoints.parquet</li>
+<li>Commands log: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/gups_split_artifacts/run_commands.log</li>
+<li>Artifacts dir: /users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/gups_split_artifacts</li>
+</ul>
+<h2>Row Meanings</h2>
+<ul>
+<li><code>base_pages</code> means THP never with no page breaks.</li>
+<li><code>no_break</code> means THP always with no page breaks.</li>
+<li>Split rows mean THP always with selected page breaks.</li>
+<li>The normalization baseline is always <code>base_pages</code>.</li>
+<li>Runtime percent formula: <code>100 * ((runtime_s_i / base_pages_runtime_s_i) - 1)</code></li>
+<li>Speedup percent formula: <code>100 * ((base_pages_runtime_s_i / runtime_s_i) - 1)</code></li>
+</ul>
+<h2>Main Graphs</h2>
+<img src="runtime_mean_std.png" alt="runtime graph" style="max-width: 100%;">
+<img src="runtime_pct_vs_base_pages.png" alt="runtime percent change graph" style="max-width: 100%;">
+<img src="speedup_pct_vs_base_pages.png" alt="speedup percent graph" style="max-width: 100%;">
+<img src="gups_mean_std.png" alt="gups graph" style="max-width: 100%;">
+<h2>Broken Page Count Curves</h2>
+<p>No successful multi-page split rows found.</p>
+<h2>Row Summary</h2>
+<table border='1' cellspacing='0' cellpadding='4'>
+<tr><th>Row</th><th>Runtime</th><th>Runtime % vs base_pages</th><th>Speedup % vs base_pages</th><th>GUP/s</th><th>dTLB loads</th><th>dTLB misses</th><th>Split successes</th><th>Expected successes</th><th>Max split attempts</th></tr>
+<tr><td>base_pages</td><td>56.160461 +/- 0.752990</td><td>0.000 +/- 0.000</td><td>0.000 +/- 0.000</td><td>0.023902 +/- 0.000322</td><td></td><td></td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>no_break</td><td>16.906239 +/- 0.086836</td><td>-69.892 +/- 0.510</td><td>232.203 +/- 5.632</td><td>0.079391 +/- 0.000409</td><td></td><td></td><td>0</td><td>0</td><td>0</td></tr>
+<tr><td>(30/30) hot pages 1 to 10</td><td>17.199722 +/- 0.073450</td><td>-69.371 +/- 0.348</td><td>226.516 +/- 3.689</td><td>0.078036 +/- 0.000333</td><td></td><td></td><td>30</td><td>30</td><td>1</td></tr>
+<tr><td>(30/30) hot pages 11 to 20</td><td>17.192213 +/- 0.019411</td><td>-69.384 +/- 0.380</td><td>226.659 +/- 4.032</td><td>0.078069 +/- 0.000088</td><td></td><td></td><td>30</td><td>30</td><td>1</td></tr>
+<tr><td>(30/30) hot pages 21 to 30</td><td>17.199321 +/- 0.046973</td><td>-69.370 +/- 0.490</td><td>226.536 +/- 5.200</td><td>0.078037 +/- 0.000213</td><td></td><td></td><td>30</td><td>30</td><td>1</td></tr>
+<tr><td>(30/30) least hot pages 1 to 10</td><td>17.246685 +/- 0.072201</td><td>-69.286 +/- 0.460</td><td>225.637 +/- 4.886</td><td>0.077823 +/- 0.000326</td><td></td><td></td><td>30</td><td>30</td><td>1</td></tr>
+</table>
+<h2>Omitted Split-Only Rows</h2>
+<ul><li>none</li></ul>
+</body></html>

@@ -1,0 +1,16 @@
+{
+  "output": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/pilot_2gib_results.parquet",
+  "artifacts_dir": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/pilot_2gib_artifacts",
+  "breakpoints_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/pilot_base_only_breakpoints.parquet",
+  "benchmark_dir": "/users/SahilSC/kernmlops-benchmark",
+  "binary_path": "/users/SahilSC/kernmlops-benchmark/gups/gups",
+  "table_size_gib": 2,
+  "table_size_mib": null,
+  "repeats": 1,
+  "updates_multiplier": 4,
+  "stream_seed": 7,
+  "runs": 1,
+  "split_mode": "pre_split",
+  "collectors": [],
+  "commands_log_path": "/users/SahilSC/HugePageResearch-gups-harness/temp_data_analysis/gups_chunked_10pages_20260501T012721Z/raw/pilot_2gib_artifacts/run_commands.log"
+}
