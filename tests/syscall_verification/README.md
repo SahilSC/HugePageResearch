@@ -147,13 +147,13 @@ Invoke the syscall:
 
 Or invoke the replay-time Python helper that now performs the same
 `INFO server` -> `VAPTR FIELD field0` -> `split_thp` flow used by
-`python/kernmlops/data_collection/replay_trace.py`:
+`python/kernmlops/replay/replay_trace.py`:
 
 ```bash
 cd ~/HugePageResearch
 PYTHONPATH=./python/kernmlops .venv/bin/python - <<'PY'
 import redis
-from data_collection.replay_trace import break_page
+from replay.replay_trace import break_page
 
 client = redis.Redis(host="127.0.0.1", port=6379, decode_responses=True)
 redis_pid = int(client.info("server")["process_id"])
